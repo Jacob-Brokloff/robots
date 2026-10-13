@@ -31,10 +31,10 @@ earlier - and the gate's refusal is the same three sentences the
 driver writes into every wire method (``send_action``, ``run_policy``,
 ``start_task``).  Restating any of that on this side would be a second
 source of truth for a rule the driver's own path already enforces
-(refs strands-labs/robots#358, strands-labs/robots#2916).  ``import
+(refs strands-labs/robots#2928, strands-labs/robots#2916).  ``import
 strands_robots.tools.g1.g1_send_action`` still pulls no
 ``unitree_sdk2py`` submodule (the package's SDK-load-hygiene contract,
-refs strands-labs/robots#358).
+refs strands-labs/robots#2928).
 
 The driver argument is typed :class:`~typing.Any` at runtime rather
 than as ``G1Driver`` for the same reason ``g1_task`` gives: the
@@ -189,15 +189,14 @@ def g1_send_action(driver: Any, action: dict[str, Any] | None = None) -> dict[st
         return _refusal_envelope(
             "g1_send_action: `action` is required. Pass a joint-name-keyed "
             "dict of target positions (radians) or per-joint {q, kp, kd, dq, "
-            "tau} dicts - see G1Driver.send_action for the shape "
-            "(refs strands-labs/robots#361)."
+            "tau} dicts - see G1Driver.send_action for the shape."
         )
     if not isinstance(action, dict):
         return _refusal_envelope(
             f"g1_send_action: `action` of type {type(action).__name__!r} is "
             "not a dict. Pass a joint-name-keyed dict of target positions "
             "(radians) or per-joint {q, kp, kd, dq, tau} dicts - see "
-            "G1Driver.send_action for the shape (refs strands-labs/robots#361)."
+            "G1Driver.send_action for the shape."
         )
     if not action:
         return _refusal_envelope(
