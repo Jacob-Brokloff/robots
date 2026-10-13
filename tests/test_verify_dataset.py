@@ -15,6 +15,8 @@ truth. Each test asserts observable behaviour - the report's ``status`` /
 from __future__ import annotations
 
 import json
+import pkgutil
+import re
 import sys
 from pathlib import Path
 
@@ -25,6 +27,7 @@ pytest.importorskip("pyarrow")
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from strands_robots.dataset_metadata import NEAR_CONSTANT_STD, flat_control_columns
 from strands_robots.verify_dataset import (
     _declared_column_blocks,
     _verify_feature_stats,
@@ -926,6 +929,316 @@ class TestDeadControlColumn:
         )
         assert verify_main([str(tmp_path), "--no-check-videos"]) == 1
         assert verify_main([str(tmp_path), "--no-check-videos", "--no-check-stats"]) == 0
+
+
+def _write_aggregate_stats(root: Path, **features: dict) -> Path:
+    """Write ``meta/stats.json``, the dataset-wide stats normalization divides by.
+
+    Keyword names are feature names with ``.`` spelled ``__`` (so
+    ``observation__state`` is ``observation.state``); each value is that
+    feature's stats mapping, written as given so a test can plant any shape.
+    """
+    (root / "meta").mkdir(parents=True, exist_ok=True)
+    stats = {name.replace("__", "."): values for name, values in features.items()}
+    (root / "meta" / "stats.json").write_text(json.dumps(stats), encoding="utf-8")
+    return root
+
+
+def _flat_action_dataset(root: Path, episodes: int = 1) -> Path:
+    """A healthy dataset whose ``action[0]`` is flat dataset-wide, at 0.7 and not zero."""
+    _write_dataset_with_stats(
+        root,
+        episode_indices=list(range(episodes)),
+        counts=[40] * episodes,
+        action_minmax=[([0.7, -0.4], [0.70002, 0.4])] * episodes,
+    )
+    return _write_aggregate_stats(root, action={"min": [0.7, -0.4], "max": [0.70002, 0.4], "std": [1e-5, 0.2]})
+
+
+class TestNearConstantColumn:
+    """A column that barely moves dataset-wide is advice, not a verdict.
+
+    The dead-column check above proves a writer failed: a vector, or one robot's
+    block of it, identically zero across an episode is a reading no sensor and
+    no teleoperator produces. A column that moved by a thousandth of its unit
+    proves nothing of the kind - a joint can be held still on purpose - but
+    mean-std normalization divides by ``std``, so the operator should hear
+    about it. The spread graded is the dataset-wide one in
+    ``meta/stats.json``, the one normalization uses, so the advice is one line
+    per feature and silent about a column that moved between episodes. A zero
+    column is named too: the dead-column check calls one among moving columns a
+    measurement and says nothing.
+    """
+
+    def test_a_flat_column_is_named_in_warnings_while_the_dataset_still_passes(self, tmp_path: Path) -> None:
+        report = verify_dataset(_flat_action_dataset(tmp_path), check_videos=False)
+        assert report["ok"] is True
+        assert report["status"] == "success"
+        assert report["problems"] == []
+        assert len(report["warnings"]) == 1
+        warning = report["warnings"][0]
+        assert "near-constant" in warning and "dataset-wide" in warning
+        assert "'action'" in warning and "[0] (std is 1e-05)" in warning and "[1]" not in warning
+        # Said of mean-std normalization only: a min-max or quantile normalizer
+        # divides by another spread, so no one mode is named as if universal.
+        assert "Mean-std normalization divides by that std" in warning and "MEAN_STD" not in warning
+
+    def test_fifty_episodes_still_give_one_advisory_per_feature(self, tmp_path: Path) -> None:
+        report = verify_dataset(_flat_action_dataset(tmp_path, episodes=50), check_videos=False)
+        assert report["ok"] is True
+        assert len(report["warnings"]) == 1, report["warnings"]
+
+    def test_a_column_held_still_per_episode_but_moved_between_them_is_not_advised(self, tmp_path: Path) -> None:
+        # Constant within every episode (a gripper parked open in one, closed in
+        # the next), so each per-episode std is 0 - but the normalizer divides by
+        # the dataset-wide spread, which is healthy.
+        levels = [0.01, 0.81] * 25
+        _write_dataset_with_stats(
+            tmp_path,
+            episode_indices=list(range(50)),
+            counts=[40] * 50,
+            action_minmax=[([v, -0.4], [v, 0.4]) for v in levels],
+        )
+        _write_aggregate_stats(tmp_path, action={"min": [0.01, -0.4], "max": [0.81, 0.4], "std": [0.4, 0.2]})
+        report = verify_dataset(tmp_path, check_videos=False)
+        assert report["ok"] is True
+        assert report["warnings"] == []
+
+    def test_a_zero_column_among_moving_ones_is_advised_about(self, tmp_path: Path) -> None:
+        # A gripper parked at zero beside a moving joint: the dead-column check
+        # calls that a measurement and reports nothing, and its dataset-wide std
+        # of 0 is the flattest a column can be.
+        _write_dataset_with_stats(
+            tmp_path,
+            episode_indices=[0],
+            counts=[40],
+            action_minmax=[([0.0, -0.4], [0.0, 0.4])],
+        )
+        _write_aggregate_stats(tmp_path, action={"min": [0.0, -0.4], "max": [0.0, 0.4], "std": [0.0, 0.2]})
+        report = verify_dataset(tmp_path, check_videos=False)
+        assert report["ok"] is True
+        assert report["problems"] == []
+        assert len(report["warnings"]) == 1, report["warnings"]
+        assert "'action'" in report["warnings"][0] and "[0]" in report["warnings"][0]
+
+    @pytest.mark.parametrize("std", [float("nan"), float("inf"), float("-inf")], ids=repr)
+    def test_a_non_finite_std_is_named_with_its_value(self, tmp_path: Path, std: float) -> None:
+        # ``nan < min_std`` is False, so a bare comparison passed over the stat
+        # that harms normalization most: dividing by a nan std makes every
+        # normalized value nan. Each non-finite value is named as its own reason.
+        _write_dataset(tmp_path, episode_indices=[0], frames_per_episode=[40])
+        _write_aggregate_stats(tmp_path, action={"std": [std, 0.0, 0.5]})
+        report = verify_dataset(tmp_path, check_videos=False)
+        assert report["ok"] is True, report["problems"]
+        [warning] = report["warnings"]
+        assert f"[0] (std is {std})" in warning, warning
+        assert "[1] (std is 0.0)" in warning and "[2]" not in warning
+
+    @pytest.mark.parametrize("check_stats", [True, False])
+    def test_a_dead_vector_is_also_one_advisory_whether_or_not_it_is_a_problem(
+        self, tmp_path: Path, check_stats: bool
+    ) -> None:
+        # The dead-column check fails a wholly zero vector only while it is on;
+        # the advice names it either way, once, rather than predicting that
+        # check from another file.
+        _write_dataset_with_stats(
+            tmp_path,
+            episode_indices=[0],
+            counts=[10],
+            action_minmax=[([0.0, 0.0], [0.0, 0.0])],
+        )
+        _write_aggregate_stats(tmp_path, action={"min": [0.0, 0.0], "max": [0.0, 0.0], "std": [0.0, 0.0]})
+        report = verify_dataset(tmp_path, check_videos=False, check_stats=check_stats)
+        assert report["ok"] is not check_stats
+        assert any("identically zero" in p for p in report["problems"]) is check_stats
+        assert len(report["warnings"]) == 1, report["warnings"]
+        assert "[0] (std is 0.0), [1] (std is 0.0)" in report["warnings"][0]
+
+    def test_only_the_flat_columns_of_a_mixed_state_vector_are_named(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, episode_indices=[0], frames_per_episode=[60])
+        _write_aggregate_stats(
+            tmp_path,
+            observation__state={"min": [-0.5, 0.2, -0.3], "max": [0.5, 0.2001, 0.3], "std": [0.2, 5e-5, 0.1]},
+            # Not a control feature, whatever its spread.
+            observation__images__cam={"std": [[[1e-9]], [[1e-9]], [[1e-9]]]},
+            # Flat and one-dimensional, so only the control-feature test keeps it out.
+            observation__environment_state={"min": [0.3], "max": [0.3], "std": [1e-9]},
+        )
+        warnings = verify_dataset(tmp_path, check_videos=False)["warnings"]
+        assert len(warnings) == 1, warnings
+        assert "'observation.state'" in warnings[0] and "[1]" in warnings[0]
+
+    @pytest.mark.parametrize(
+        "document", [None, "{not json", "[1, 2]", '{"action": [1e-5]}', '{"action": {"std": null}}']
+    )
+    def test_stats_it_cannot_read_leave_nothing_to_say(self, tmp_path: Path, document: str | None) -> None:
+        _write_dataset(tmp_path, episode_indices=[0], frames_per_episode=[40])
+        if document is not None:
+            (tmp_path / "meta" / "stats.json").write_text(document, encoding="utf-8")
+        report = verify_dataset(tmp_path, check_videos=False)
+        assert report["ok"] is True
+        assert report["warnings"] == []
+
+    def test_a_nested_or_bool_std_is_not_compared_and_the_report_is_returned(self, tmp_path: Path) -> None:
+        # A nested per-episode stat is check 6's input and a nested or ``false``
+        # aggregate entry is not a number: neither may raise out of a checker
+        # whose contract is to return a report, and neither is evidence of flatness.
+        # Nor may an integer too large for a float, which ``math.isfinite`` raises on.
+        _write_stats_parquet(
+            tmp_path,
+            {
+                "episode_index": [0],
+                "length": [40],
+                "stats/observation.state/min": [[[0.1, 0.2], [0.3, 0.4]]],
+                "stats/observation.state/max": [[[0.5, 0.6], [0.7, 0.8]]],
+                "stats/observation.state/std": [[[1e-5, 1e-5], [1e-5, 1e-5]]],
+                "stats/observation.state/count": [[40]],
+            },
+        )
+        _write_aggregate_stats(
+            tmp_path,
+            observation__state={"std": [[1e-5, 1e-5], [1e-5, 1e-5]]},
+            action={"std": [False, None, "0", 10**400]},
+        )
+        report = verify_dataset(tmp_path, check_videos=False)
+        assert report["ok"] is True, report["problems"]
+        assert report["warnings"] == []
+
+    def test_min_std_zero_switches_the_advice_off_and_no_check_stats_leaves_it_on(self, tmp_path: Path) -> None:
+        # ``--no-check-stats`` is check 6's switch, as documented; the advice reads
+        # another file and has its own.
+        _flat_action_dataset(tmp_path)
+        assert verify_dataset(tmp_path, check_videos=False, min_std=0)["warnings"] == []
+        assert len(verify_dataset(tmp_path, check_videos=False, check_stats=False)["warnings"]) == 1
+
+    def test_the_min_std_docs_say_0_disables_and_cite_only_names_this_command_reaches(self) -> None:
+        # The ``min_std`` Args entry and both ``--min-std`` rows say what ``0`` does
+        # here. How another API's threshold spells "off" is that API's to document
+        # beside its own field: named here, it is a field this command does not
+        # have, and possibly one this tree does not have yet. So every class
+        # attribute or ``strands_robots`` name these three cite has to resolve.
+        docs = Path(__file__).resolve().parents[1] / "docs"
+        surfaces = {"verify_dataset": (verify_dataset.__doc__ or "").partition("min_std:")[2].partition("\n\n")[0]}
+        for page in ("learn/data/verify.md", "reference/cli.md"):
+            lines = (docs / page).read_text(encoding="utf-8").splitlines()
+            [surfaces[page]] = [line for line in lines if line.startswith("| `--min-std X` |")]
+        assert all(re.search(r"`0`+\s+disables", text) for text in surfaces.values()), surfaces
+        cited = [
+            (where, name)
+            for where, text in surfaces.items()
+            for name in re.findall(r"`~?([A-Za-z_]\w*(?:\.\w+)+)`", text)
+            if name[0].isupper() or name.startswith("strands_robots.")
+        ]
+        # Non-vacuity: the Args entry cites the default by its qualified name.
+        assert ("verify_dataset", "strands_robots.dataset_metadata.NEAR_CONSTANT_STD") in cited
+        unresolved = []
+        for where, name in cited:
+            target = name if name.startswith("strands_robots.") else f"strands_robots.verify_dataset:{name}"
+            try:
+                pkgutil.resolve_name(target)
+            except (ImportError, AttributeError):
+                unresolved.append(f"{where}: {name}")
+        assert unresolved == [], unresolved
+
+    def test_the_cli_prints_the_advice_and_still_exits_zero(self, tmp_path: Path, capsys) -> None:
+        _flat_action_dataset(tmp_path)
+        assert verify_main([str(tmp_path), "--no-check-videos"]) == 0
+        out = capsys.readouterr().out
+        assert "[PASS]" in out
+        assert "! feature 'action'" in out and "near-constant" in out
+
+        assert verify_main([str(tmp_path), "--no-check-videos", "--min-std", "0"]) == 0
+        assert "near-constant" not in capsys.readouterr().out
+
+
+class TestFlatControlColumnsIsTheSharedReader:
+    """The advice above reads its columns through one public reader.
+
+    A trainer that refuses a flat dataset asks ``meta/stats.json`` the same
+    question with the same test, so the test lives once in
+    :func:`~strands_robots.dataset_metadata.flat_control_columns`, below both,
+    and the default threshold is one public name rather than a private copy each.
+    """
+
+    def test_it_returns_each_flagged_column_with_its_reason(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, episode_indices=[0], frames_per_episode=[40])
+        _write_aggregate_stats(
+            tmp_path,
+            action={"std": [float("nan"), 0.0, 0.5]},
+            observation__state={"std": [0.2, 5e-5]},
+            observation__images__cam={"std": [[[1e-9]]]},
+        )
+        assert flat_control_columns(tmp_path, 1e-3) == {
+            "action": [("[0]", "std is nan"), ("[1]", "std is 0.0")],
+            "observation.state": [("[1]", "std is 5e-05")],
+        }
+
+    def test_the_advice_names_exactly_the_columns_it_returns(self, tmp_path: Path) -> None:
+        _write_dataset(tmp_path, episode_indices=[0], frames_per_episode=[40])
+        _write_aggregate_stats(
+            tmp_path, action={"std": [float("inf"), 0.3]}, observation__state={"std": [0.0, -1.0, 2e-4]}
+        )
+        flagged = flat_control_columns(tmp_path, 1e-3)
+        warnings = verify_dataset(tmp_path, check_videos=False, min_std=1e-3)["warnings"]
+        assert len(warnings) == len(flagged) == 2, warnings
+        for (feat, columns), warning in zip(flagged.items(), warnings, strict=True):
+            assert warning.startswith(f"feature '{feat}' column(s) ")
+            assert ", ".join(f"{column} ({reason})" for column, reason in columns) in warning
+
+    @pytest.mark.parametrize(
+        ("declared", "named"),
+        [
+            pytest.param({"names": ["shoulder_pan.pos", "gripper.pos"]}, "gripper.pos", id="list"),
+            pytest.param({"names": {"motors": ["shoulder_pan", "gripper"]}}, "gripper", id="dict-of-lists"),
+            pytest.param({"names": {"arm": ["shoulder_pan"], "hand": ["gripper"]}}, "gripper", id="dict-in-order"),
+            pytest.param({"names": ["gripper.pos"]}, "[1]", id="wrong-width"),
+            pytest.param({"names": [0, 1]}, "[1]", id="not-strings"),
+            pytest.param({"names": {"motors": "gripper"}}, "[1]", id="dict-not-of-lists"),
+            pytest.param({}, "[1]", id="no-names"),
+        ],
+    )
+    def test_a_column_is_named_as_info_json_declares_it(self, tmp_path: Path, declared: dict, named: str) -> None:
+        # ``gripper.pos`` is what an operator can act on; ``[1]`` is the fallback
+        # when the declaration cannot name this vector's columns one for one.
+        _write_dataset(tmp_path, episode_indices=[0], frames_per_episode=[40], info={"features": {"action": declared}})
+        _write_aggregate_stats(tmp_path, action={"std": [0.2, 0.0]})
+        assert flat_control_columns(tmp_path) == {"action": [(named, "std is 0.0")]}
+        [warning] = verify_dataset(tmp_path, check_videos=False)["warnings"]
+        assert f"column(s) {named} (std is 0.0) are" in warning, warning
+
+    @pytest.mark.parametrize("document", ["[1, 2]", '{"features": []}', '{"features": {"action": null}}', "{not json"])
+    def test_an_unusable_info_json_leaves_the_indices(self, tmp_path: Path, document: str) -> None:
+        _write_dataset(tmp_path, episode_indices=[0], frames_per_episode=[40])
+        (tmp_path / "meta" / "info.json").write_text(document, encoding="utf-8")
+        _write_aggregate_stats(tmp_path, action={"std": [0.2, 0.0]})
+        assert flat_control_columns(tmp_path) == {"action": [("[1]", "std is 0.0")]}
+
+    def test_a_file_nested_too_deep_for_json_is_unreadable_not_a_raise(self, tmp_path: Path) -> None:
+        # ``json`` raises ``RecursionError``, which is not a ``ValueError``, on a
+        # document nested this deep; a reader a report-returning checker calls
+        # must answer it the way it answers a file that is not JSON.
+        deep = "[" * 1_000_000 + "]" * 1_000_000
+        with pytest.raises(RecursionError):
+            json.loads(deep)
+        _write_dataset(tmp_path, episode_indices=[0], frames_per_episode=[40])
+        (tmp_path / "meta" / "stats.json").write_text(deep, encoding="utf-8")
+        report = verify_dataset(tmp_path, check_videos=False)
+        assert report["ok"] is True and report["warnings"] == []
+        _write_aggregate_stats(tmp_path, action={"std": [0.2, 0.0]})
+        (tmp_path / "meta" / "info.json").write_text(deep, encoding="utf-8")
+        assert flat_control_columns(tmp_path) == {"action": [("[1]", "std is 0.0")]}
+
+    def test_one_public_default_threshold_serves_the_reader_the_api_and_the_cli(self, tmp_path: Path, capsys) -> None:
+        # The value both doc rows state.
+        assert NEAR_CONSTANT_STD == 1e-3
+        _write_dataset(tmp_path, episode_indices=[0], frames_per_episode=[40])
+        # Either side of the default: a column at 0.9 of it is flat, one at 1.1 is not.
+        _write_aggregate_stats(tmp_path, action={"std": [0.9 * NEAR_CONSTANT_STD, 1.1 * NEAR_CONSTANT_STD]})
+        assert [column for column, _ in flat_control_columns(tmp_path)["action"]] == ["[0]"]
+        [warning] = verify_dataset(tmp_path, check_videos=False)["warnings"]
+        assert f"min_std={NEAR_CONSTANT_STD:g}" in warning
+        assert verify_main([str(tmp_path), "--no-check-videos"]) == 0
+        assert f"min_std={NEAR_CONSTANT_STD:g}" in capsys.readouterr().out
 
 
 def _write_stats_parquet(root: Path, columns: dict[str, list]) -> Path:

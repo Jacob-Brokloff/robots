@@ -37,6 +37,11 @@ Checks performed against a dataset root (the dir containing ``meta/``):
      columns written as zeros is flagged even while another robot's columns
      carry real measurements.
 
+Separately, ``meta/stats.json`` is read for ADVICE in ``warnings``, never for a
+problem: a control column whose dataset-wide ``std`` is below ``--min-std``
+(default 1e-3; ``0`` disables it) is near-constant, and one whose ``std`` is
+nan or infinite is named with that value.
+
 Usage:
     strands-robots verify-dataset /path/to/dataset
     strands-robots verify-dataset /path/to/dataset --expected 20
@@ -50,7 +55,8 @@ same holds for ``meta/info.json``, whether it cannot be read or holds a document
 that is not a JSON object.
 
 Exit code is 0 when every check passes, 1 otherwise - so it drops straight into
-CI as a dataset-integrity gate.
+CI as a dataset-integrity gate. A ``warnings`` entry changes neither, because
+every one of them has a reading under which the dataset is correct.
 """
 
 from __future__ import annotations
@@ -62,8 +68,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from strands_robots.dataset_metadata import read_dataset_episode_indices
-from strands_robots.utils import declared_count, non_negative_count_error
+from strands_robots.dataset_metadata import (
+    NEAR_CONSTANT_STD,
+    _is_control_feature,
+    flat_control_columns,
+    read_dataset_episode_indices,
+)
+from strands_robots.utils import declared_count, finite_number_error, non_negative_count_error, refusal_repr
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +131,7 @@ def verify_dataset(
     min_frames: int = 1,
     check_videos: bool = True,
     check_stats: bool = True,
+    min_std: float = NEAR_CONSTANT_STD,
 ) -> dict[str, Any]:
     """Verify the episode integrity of a LeRobot dataset on disk.
 
@@ -142,6 +154,13 @@ def verify_dataset(
             block that is wholly zero is flagged even when its siblings vary; a
             zero SUBSET of one robot's block (a gripper parked at zero for the
             whole episode) is a measurement and is not flagged.
+        min_std: Dataset-wide standard deviation (``meta/stats.json``) every
+            control column is expected to reach, by default
+            :data:`~strands_robots.dataset_metadata.NEAR_CONSTANT_STD`; a column
+            below it is reported in ``warnings`` as near-constant, and so is one
+            whose std is nan or infinite. A non-negative finite number; ``0``
+            disables this report. Advice and not a problem, because a joint held
+            still on purpose reads the same.
 
     Returns:
         A report dict with:
@@ -164,6 +183,8 @@ def verify_dataset(
             stat vectors inspected for the dead-column check (``0`` when
             ``check_stats`` is False or the dataset carries no stats).
           - ``problems``: list of human-readable failure strings (empty on pass).
+          - ``warnings``: list of human-readable advisory strings, which change
+            neither ``ok`` / ``status`` nor the exit code.
     """
     root_path = Path(root)
     report: dict[str, Any] = {
@@ -180,6 +201,7 @@ def verify_dataset(
         "video_files_checked": 0,
         "stats_vectors_checked": 0,
         "problems": [],
+        "warnings": [],
     }
     problems: list[str] = report["problems"]
 
@@ -196,6 +218,14 @@ def verify_dataset(
         problems.append(error)
     if error := non_negative_count_error(min_frames, "min_frames", "verify_dataset"):
         problems.append(error)
+    # ``min_std`` is a spread, the one continuous threshold here, and its ``0``
+    # is the same "switch this off" the two counts spell. The numeric rule is the
+    # shared ``finite_number_error``, and a value it refuses is reported in its
+    # words; only the floor is local, as for ``WBCConfig``'s gains.
+    if error := finite_number_error(min_std, "min_std", "verify_dataset"):
+        problems.append(error)
+    elif min_std < 0:
+        problems.append(f"verify_dataset: min_std must be >= 0, got {refusal_repr(min_std)}.")
     if problems:
         return report
 
@@ -328,6 +358,9 @@ def verify_dataset(
         )
         report["stats_vectors_checked"] = stats_checked
         problems.extend(stats_problems)
+
+    if min_std > 0:
+        report["warnings"].extend(_near_constant_advice(root_path, float(min_std)))
 
     report["ok"] = not problems
     report["status"] = "success" if report["ok"] else "error"
@@ -618,9 +651,6 @@ def _verify_feature_stats(
     if not parquet_files:
         return 0, []
 
-    def _is_control_feature(name: str) -> bool:
-        return name == "action" or name == "observation.state" or name.startswith("observation.state.")
-
     def _episode_count(value: Any) -> int | None:
         # The stats ``count`` column is stored as a length-1 list per episode.
         if value is None:
@@ -701,6 +731,37 @@ def _verify_feature_stats(
     return checked, problems
 
 
+def _near_constant_advice(root_path: Path, min_std: float) -> list[str]:
+    """One advisory per control feature :func:`flat_control_columns` flags.
+
+    The columns come from that one shared reader of ``meta/stats.json``, so any
+    other caller of it (a training preflight, say) names the same ones. A zero
+    column is named like any other. Check 6 reports one
+    only inside a wholly zero vector or robot block, and only while
+    ``check_stats`` is on; it calls a zero column among moving ones (a gripper
+    parked at zero) a measurement. Deferring to it would leave that column
+    unreported, so a wholly zero vector is named here as well as failed there.
+
+    Args:
+        root_path: Dataset root directory (the dir that contains ``meta/``).
+        min_std: The spread a column is expected to reach; a positive number.
+
+    Returns:
+        One advisory per flagged feature, each column named with its reason
+        (``[3] (std is nan)``). Empty when nothing is flagged.
+    """
+    advice: list[str] = []
+    for feat, columns in flat_control_columns(root_path, min_std).items():
+        named = ", ".join(f"{column} ({reason})" for column, reason in columns)
+        advice.append(
+            f"feature '{feat}' column(s) {named} are near-constant or not finite: their dataset-wide std in "
+            f"meta/stats.json is below min_std={min_std:g}, or nan or infinite. Mean-std normalization divides "
+            "by that std, which scales such a column far out of range or turns it to nan or 0. Advice, not a "
+            "problem: a joint held still on purpose reads the same"
+        )
+    return advice
+
+
 def _format_report(report: dict[str, Any]) -> str:
     """Render a report dict as a human-readable multi-line summary."""
     lines: list[str] = []
@@ -720,6 +781,10 @@ def _format_report(report: dict[str, Any]) -> str:
         lines.append(f"  info.json frames  : {report['info_total_frames']}")
     for problem in report["problems"]:
         lines.append(f"  - {problem}")
+    # Advice is marked, and printed after the problems, so a PASS line above a
+    # warning cannot be read as a contradiction.
+    for warning in report.get("warnings", []):
+        lines.append(f"  ! {warning}")
     return "\n".join(lines)
 
 
@@ -760,6 +825,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_false",
         help="Skip the dead-control-column (all-zero action/state) check.",
     )
+    parser.add_argument(
+        "--min-std",
+        type=float,
+        default=NEAR_CONSTANT_STD,
+        help=(
+            "Advise on any control column whose dataset-wide std (meta/stats.json) is below this or not "
+            f"finite (default: {NEAR_CONSTANT_STD:g}); 0 disables. Advisory: it does not change the exit code."
+        ),
+    )
     args = parser.parse_args(argv)
 
     report = verify_dataset(
@@ -768,6 +842,7 @@ def main(argv: list[str] | None = None) -> int:
         min_frames=args.min_frames,
         check_videos=args.check_videos,
         check_stats=args.check_stats,
+        min_std=args.min_std,
     )
     if args.json:
         print(json.dumps(report, indent=2))
