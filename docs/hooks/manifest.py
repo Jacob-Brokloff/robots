@@ -98,6 +98,16 @@ _DESCRIPTION_REPOS: dict[str, tuple[str, str, str]] = {
 }
 
 
+def _menagerie_dir(asset: dict) -> str:
+    """The asset's menagerie directory: ``upstream_dir`` where the entry declares one, else its ``dir``.
+
+    The two differ when one menagerie directory ships the models of two entries
+    (``unitree_g1`` holds both G1 models), because no two entries may share a cache
+    ``dir``. The downloader's git fallback reads the same field.
+    """
+    return asset.get("upstream_dir") or asset["dir"]
+
+
 def _lfs_url(name: str, asset: dict) -> str | None:
     """GitHub's LFS media endpoint for the same directory; jsDelivr serves LFS pointers, not blobs."""
     if name in _DESCRIPTION_REPOS:
@@ -109,7 +119,7 @@ def _lfs_url(name: str, asset: dict) -> str | None:
         )
     source = asset.get("source") or {"type": "menagerie"}
     if source.get("type") == "menagerie":
-        return f"https://media.githubusercontent.com/media/google-deepmind/mujoco_menagerie/{MENAGERIE_REF}/{asset['dir']}/"
+        return f"https://media.githubusercontent.com/media/google-deepmind/mujoco_menagerie/{MENAGERIE_REF}/{_menagerie_dir(asset)}/"
     if source.get("type") == "github" and source.get("repo"):
         repo = _REPO_MOVES.get(source["repo"], source["repo"])
         ref = _GITHUB_REFS.get(name, source.get("ref") or "main")
@@ -129,7 +139,7 @@ def _base_url(name: str, asset: dict) -> str | None:
         return f"{_CDN}/{repo}@{commit}/{subdir}/" if subdir else f"{_CDN}/{repo}@{commit}/"
     source = asset.get("source") or {"type": "menagerie"}
     if source.get("type") == "menagerie":
-        return f"{_CDN}/google-deepmind/mujoco_menagerie@{MENAGERIE_REF}/{asset['dir']}/"
+        return f"{_CDN}/google-deepmind/mujoco_menagerie@{MENAGERIE_REF}/{_menagerie_dir(asset)}/"
     if source.get("type") == "github" and source.get("repo"):
         repo = _REPO_MOVES.get(source["repo"], source["repo"])
         ref = _GITHUB_REFS.get(name, source.get("ref") or "main")
