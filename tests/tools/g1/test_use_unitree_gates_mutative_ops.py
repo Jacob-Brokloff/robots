@@ -24,6 +24,8 @@ from unittest.mock import MagicMock
 import pytest
 
 import strands_robots.tools.g1.use_unitree as uu
+from strands_robots.utils import dds_domain_id_error
+from tests.test_dds_domain_id_domain import UNUSABLE_DOMAINS
 
 
 def _payload(result: dict) -> dict:
@@ -77,7 +79,7 @@ def _ctx(response: object) -> MagicMock:
 def robot(monkeypatch: pytest.MonkeyPatch) -> _Recorder:
     """A reachable bus with recording clients and a clean gate environment."""
     rec = _Recorder()
-    monkeypatch.setattr(uu, "ensure_dds", lambda _iface: None)
+    monkeypatch.setattr(uu, "ensure_dds", lambda _iface, domain_id=0: None)
     monkeypatch.setattr(uu, "_CLIENTS", {"loco": rec, "motion_switcher": rec, "audio": rec})
     for name in ("BYPASS_TOOL_CONSENT", uu.COMMAND_ALLOW_ENV):
         monkeypatch.delenv(name, raising=False)
@@ -236,3 +238,28 @@ def test_the_tool_declares_it_receives_the_operator_context() -> None:
     assert list(params)[-1] == "tool_context", (
         "tool_context must stay the last parameter so the model-facing order is unchanged"
     )
+
+
+class TestAnUnusableDomainNeverReachesTheOperator:
+    """``domain_id`` is the model's to name, so a value no bus can bind is refused before the gate.
+
+    The stand-in bus accepts any domain, so a value that reached the gate here would be approved
+    and sent: whether the operator was asked is the measurement, not which branch refused.
+    """
+
+    @pytest.mark.parametrize("value", UNUSABLE_DOMAINS, ids=repr)
+    def test_an_unusable_domain_is_refused_before_the_operator_is_asked(self, robot: _Recorder, value: Any) -> None:
+        """Every facet of one value: no prompt, no call, the shared refusal, the danger flags."""
+        ctx = _ctx("y")  # an operator who would approve, so only the domain can refuse
+
+        res = _payload(
+            uu.use_unitree(
+                "loco", "SetVelocity", {"vx": 0.3, "vy": 0.0, "vyaw": 0.0}, domain_id=value, tool_context=ctx
+            )
+        )
+
+        ctx.interrupt.assert_not_called()
+        assert robot.calls == []
+        assert res["status"] == "error" and res["dispatched"] is False
+        assert res["message"] == f"loco.SetVelocity refused: {dds_domain_id_error(value, 'domain_id', 'use_unitree')}"
+        assert res["high_danger"] is True and res["mutative"] is True

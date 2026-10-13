@@ -79,6 +79,7 @@ from strands.types.tools import ToolContext
 
 from strands_robots._command_gate import gate_motion
 from strands_robots.drivers.unitree._common import _DDS_INIT_LOCK, as_tool_result, ensure_dds
+from strands_robots.utils import dds_domain_id_error
 
 logger = logging.getLogger(__name__)
 
@@ -472,8 +473,9 @@ def _execute(
     operation_name: str,
     parameters: dict[str, Any],
     network_interface: str = "eth0",
+    domain_id: int = 0,
 ) -> dict[str, Any]:
-    err = ensure_dds(network_interface)
+    err = ensure_dds(network_interface, domain_id=domain_id)
     if err:
         return {"ok": False, "error": err}
 
@@ -542,6 +544,7 @@ def use_unitree(
     parameters: dict[str, Any] | None = None,
     label: str = "",
     network_interface: str = "eth0",
+    domain_id: int = 0,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Universal interface to every Unitree SDK2 client method.
@@ -592,6 +595,10 @@ def use_unitree(
             lookup target (e.g. {'service_name': 'loco'}).
         label: Optional human-readable description, echoed in the response.
         network_interface: DDS interface. Default 'eth0'.
+        domain_id: DDS domain, 0 to 232. Default 0, the domain the robot
+            ships on. Name another only to reach a bus that is not on it
+            (a simulator, a bench rig); the bus binds once per process, so
+            a second domain in one process is refused, naming the bound one.
         tool_context: Supplied by the agent runtime; carries the operator
             interrupt the mutative ops are approved through. Without it a
             mutative op is refused unless pre-approved via
@@ -702,6 +709,17 @@ def use_unitree(
         "high_danger": high_danger,
     }
 
+    # The model names the domain, so a value no bus can bind is refused here,
+    # ahead of the gate: an operator must not be asked to approve a command that
+    # could only fail on its domain. In the shared words, as every surface is.
+    if reason := dds_domain_id_error(domain_id, "domain_id", "use_unitree"):
+        return {
+            "status": "error",
+            "message": f"{service_name}.{operation_name} refused: {reason}",
+            "dispatched": False,
+            **classification,
+        }
+
     if (high_danger or mutative) and (service_name, operation_name) not in _UNGATED_STOP_OPS:
         refusal = _gate(service_name, operation_name, high_danger, tool_context)
         if refusal is not None:
@@ -714,7 +732,7 @@ def use_unitree(
                 **classification,
             }
 
-    res = _execute(service_name, operation_name, params, network_interface=network_interface)
+    res = _execute(service_name, operation_name, params, network_interface=network_interface, domain_id=domain_id)
 
     if not res.get("ok"):
         return {

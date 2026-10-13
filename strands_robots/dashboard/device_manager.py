@@ -24,7 +24,7 @@ from typing import Any, cast
 from strands_robots.dashboard import bus_claim
 from strands_robots.simulation.models import registered, registry_entry
 
-from ..utils import non_negative_whole_number_error, refusal_repr, refusal_str
+from ..utils import dds_domain_id_error, non_negative_whole_number_error, refusal_repr, refusal_str
 from . import arm_roles, camera_liveness
 from . import cameras as camera_facts
 
@@ -77,6 +77,9 @@ class ManagedRobot:
     port: str | None = None
     # The lerobot calibration id this child was started with.
     robot_id: str | None = None
+    # The NIC and DDS domain it was started with, so a camera respawn binds the same bus.
+    network_interface: str | None = None
+    domain_id: int | None = None
     cameras: dict[str, Any] = field(default_factory=dict)
     process: subprocess.Popen | None = None
     started_at: float = 0.0
@@ -585,6 +588,8 @@ if cfg["mode"] == "real":
             kwargs["id"] = cfg["robot_id"]
     if cfg.get("network_interface"):
         kwargs["network_interface"] = cfg["network_interface"]
+    if cfg.get("domain_id") is not None:
+        kwargs["domain_id"] = cfg["domain_id"]
     robot = Robot(
         cfg["robot_name"], mode="real", port=cfg["port"],
         cameras=cfg.get("cameras") or None,
@@ -1422,16 +1427,20 @@ def real_transport(robot_name: str) -> dict[str, Any]:
     """What a ``mode="real"`` spawn of ``robot_name`` needs, for the form and the refusals.
 
     Returns:
-        ``{"port_kind": "serial" | "address", "network_interface": bool}`` - whether ``port``
-        is a servo bus on this machine or the robot's network address, and whether the driver
-        takes the NIC its traffic binds to.
+        ``{"port_kind": "serial" | "address", "network_interface": bool, "domain_id": bool}`` -
+        whether ``port`` is a servo bus on this machine or the robot's network address, and
+        whether the driver takes the NIC its traffic binds to and the DDS domain it joins.
     """
     from strands_robots.drivers import constructor_keywords, get_native_driver_class, port_kind
 
     kind = port_kind(robot_name)
     driver_cls = get_native_driver_class(robot_name) if kind == "address" else None
-    nic = driver_cls is not None and "network_interface" in constructor_keywords(driver_cls)
-    return {"port_kind": kind, "network_interface": nic}
+    keywords = constructor_keywords(driver_cls) if driver_cls is not None else ()
+    return {
+        "port_kind": kind,
+        "network_interface": "network_interface" in keywords,
+        "domain_id": "domain_id" in keywords,
+    }
 
 
 def validate_robot_id(robot_id: Any) -> str | None:
@@ -2238,12 +2247,16 @@ class DeviceManager:
         robot_id: str | None = None,
         remember: bool = True,
         network_interface: str | None = None,
+        domain_id: int | None = None,
     ) -> dict[str, Any]:
         """Start a robot child process for ``robot_name`` and register it as a managed peer.
 
         ``port`` is what :func:`real_transport` says it is for this robot: a servo bus on this
         machine (required) or the robot's network address (optional - several network drivers
-        discover the robot). ``network_interface`` is accepted only by a driver that takes one.
+        discover the robot). ``network_interface`` and ``domain_id`` are each accepted only by a
+        driver that takes one, and ``domain_id`` only as an ``int`` in ``0`` to
+        :data:`~strands_robots.utils.MAX_DDS_DOMAIN_ID`; ``None`` leaves the driver's own default,
+        domain ``0``.
         """
         import json as _json
 
@@ -2273,6 +2286,10 @@ class DeviceManager:
             return {"error": f"network_interface refused: the {robot_name} driver takes no network interface"}
         if (bad_nic := validate_network_interface(network_interface)) is not None:
             return {"error": bad_nic}
+        if domain_id is not None and not transport.get("domain_id"):
+            return {"error": f"domain_id refused: the {robot_name} driver takes no DDS domain"}
+        if domain_id is not None and (bad_domain := dds_domain_id_error(domain_id, "domain_id", "spawn")):
+            return {"error": bad_domain}
         # Only a device path is a bus: the claim check and the board profile are about one.
         serial_port = port if isinstance(port, str) and port.startswith("/dev/") else None
         # A real arm inherits the dashboard's mesh posture; when that posture has no wire auth the
@@ -2303,7 +2320,7 @@ class DeviceManager:
                 "dict[str, Any] | None",
                 camera_liveness.stamp_device_names(cameras, self._roster_for_stamp()),
             )
-            cfg = {
+            cfg: dict[str, Any] = {
                 "robot_name": robot_name,
                 "mode": mode,
                 "peer_id": peer_id,
@@ -2313,6 +2330,8 @@ class DeviceManager:
             }
             if network_interface:
                 cfg["network_interface"] = network_interface
+            if domain_id is not None:
+                cfg["domain_id"] = domain_id
             proc = subprocess.Popen(
                 # The child gets the camera config with the dashboard's own notes REMOVED:
                 # _build_camera_config refuses any key OpenCVCameraConfig does not declare, so a forwarded
@@ -2333,6 +2352,8 @@ class DeviceManager:
                 mode=mode,
                 port=port,
                 robot_id=robot_id,
+                network_interface=network_interface,
+                domain_id=domain_id,
                 cameras=cameras or {},
                 process=proc,
                 started_at=time.time(),
@@ -2649,6 +2670,7 @@ class DeviceManager:
                 }
             # Everything about the old spawn EXCEPT the cameras.
             robot_name, mode, port = m.robot_name, m.mode, m.port
+            network_interface, domain_id = m.network_interface, m.domain_id
         if mode not in SPAWNABLE_MODES:
             return {"error": f"{peer_id} is a {mode} job, not a respawnable robot"}
         # robot_id is the lerobot CALIBRATION identity - ManagedRobot does not
@@ -2670,6 +2692,8 @@ class DeviceManager:
             cameras=cameras,
             robot_id=robot_id,
             remember=True,
+            network_interface=network_interface,
+            domain_id=domain_id,
         )
         result["reconfigured"] = "error" not in result
         return result
