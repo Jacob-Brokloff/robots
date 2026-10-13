@@ -122,6 +122,7 @@ def train_policy(
     lora_target_modules: str | None = None,
     tune: dict[str, bool] | None = None,
     val_episodes: int | None = None,
+    min_std: float | None = None,
     augmentation: dict[str, Any] | None = None,
     fps: int | None = None,
     extra: dict[str, Any] | None = None,
@@ -229,6 +230,14 @@ def train_policy(
             source (``dataset_repo_id`` with no populated ``dataset_root``) is
             refused with the two ways to get a split instead of being launched
             without one.
+        min_std: Smallest aggregate std an action / observation.state column
+            may have, or None (the default) to train on whatever the dataset
+            holds. A positive finite number; a flatter column, or one whose std
+            is nan or infinite, is refused, not changed, because MEAN_STD
+            normalization divides by std + 1e-8. Opt-in: a joint held still on
+            purpose reads the same. 0 is refused, not read as off, unlike
+            verify-dataset --min-std 0, which switches that command's advice
+            off (its default is NEAR_CONSTANT_STD, 1e-3).
         augmentation: Backend-specific augmentation dict.
         fps: Dataset control rate (when a backend needs it).
         extra: Backend-specific passthrough. lerobot: ``policy_type``,
@@ -355,6 +364,7 @@ def train_policy(
             lora_target_modules=lora_target_modules,
             tune=tune or {},
             val_episodes=val_episodes,
+            min_std=min_std,
             augmentation=augmentation,
             fps=fps,
             extra=extra or {},

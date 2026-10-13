@@ -50,6 +50,7 @@ import dataclasses
 import importlib.util
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -483,6 +484,53 @@ def _dataset_quantile_stats_present(dataset_root: str) -> bool | None:
         # QUANTILES-normalizing run on evidence that was never gathered.
         return None
     return _stats_have_quantiles(stats)
+
+
+def _columns_below_min_std(dataset_root: str, min_std: float) -> list[str]:
+    """Control columns of a local dataset whose aggregate ``std`` is under ``min_std`` or not finite.
+
+    Reads the ``meta/stats.json`` normalization divides by; per-episode stats
+    cannot answer this, since a column held still within each episode and moved
+    between them has a healthy aggregate spread. Only ``action`` and
+    ``observation.state*`` entries that are real numbers are graded, and a nan
+    or infinite one is flagged whatever ``min_std`` is.
+
+    Args:
+        dataset_root: LeRobotDataset v3 root (the dir that contains ``meta/``).
+        min_std: The spread each column must reach; the caller grades it.
+
+    Returns:
+        One ``"<feature>[<index>] (std is <value>)"`` label per flagged column
+        (``"action[0] (std is nan)"``). Empty when ``meta/stats.json`` is
+        absent, unreadable or not an object: a run is not refused on evidence
+        nobody gathered.
+    """
+    # ``RecursionError`` is not a ``ValueError``: ``json`` raises it on a document
+    # nested too deep to parse, which is as unreadable as one that is not JSON.
+    try:
+        with open(os.path.join(dataset_root, "meta", "stats.json"), encoding="utf-8") as fh:
+            stats = json.load(fh)
+    except (OSError, ValueError, RecursionError):
+        return []
+    if not isinstance(stats, dict):
+        return []
+    flat: list[str] = []
+    for feature, values in stats.items():
+        if feature not in ("action", "observation.state") and not feature.startswith("observation.state."):
+            continue
+        stds = values.get("std") if isinstance(values, dict) else None
+        if isinstance(stds, list):
+            # ``nan < min_std`` is False, so a non-finite float is flagged by its
+            # own test. Only a float can be one: ``math.isfinite`` raises on an
+            # integer too large for a float, which ``json`` parses from a long literal.
+            flat.extend(
+                f"{feature}[{index}] (std is {std})"
+                for index, std in enumerate(stds)
+                if isinstance(std, (int, float))
+                and not isinstance(std, bool)
+                and (std < min_std or (isinstance(std, float) and not math.isfinite(std)))
+            )
+    return flat
 
 
 def _format_version_major(version: str) -> int | None:
@@ -1070,8 +1118,9 @@ class LerobotTrainer(Trainer):
         ``streaming`` ahead of the pair check it gates), a ``val_episodes``
         split below the dataset total and not asked for alongside ``streaming``
         (lerobot's split path is map-style only), a local dataset format version
-        the installed lerobot can read, usable LoRA hyperparameters when
-        ``method == "lora"``, that ``lerobot.scripts.lerobot_train``
+        the installed lerobot can read, no control column flatter than
+        ``min_std``, or not finite, when one is asked for, usable LoRA
+        hyperparameters when ``method == "lora"``, that ``lerobot.scripts.lerobot_train``
         is importable, and that the packages its ``train()`` requires at call
         time (``accelerate`` always, ``peft`` for ``method == "lora"``) are
         installed. ``extra['reward_model']`` switches to reward-model
@@ -1191,8 +1240,11 @@ class LerobotTrainer(Trainer):
                     problems.append(split_err)
 
         # Shared by BOTH run types: policy and reward-model training load the
-        # same dataset, so an unreadable format version refuses either one.
+        # same dataset, so an unreadable format version - or a control column
+        # flatter than the ``min_std`` the operator asked for, or not finite -
+        # refuses either one.
         problems.extend(self._dataset_codebase_version_problems(spec))
+        problems.extend(self._near_constant_column_problems(spec))
         problems.extend(self._lora_hyperparameter_problems(spec))
 
         # lerobot must be importable to actually train.
@@ -1467,6 +1519,32 @@ class LerobotTrainer(Trainer):
             "lerobot would mis-normalize or fail at train time. Add quantile stats first: "
             f"python -m lerobot.scripts.augment_dataset_quantile_stats --repo-id={repo_id} "
             f"--root={spec.dataset_root} (datasets recorded with current lerobot already include them)."
+        ]
+
+    def _near_constant_column_problems(self, spec: TrainSpec) -> list[str]:
+        """Refuse a local dataset with a control column flatter than ``min_std``, or not finite.
+
+        ``MEAN_STD`` normalization divides by ``std + 1e-8``, so a column flat to
+        a thousandth of its unit scales what deviation remains by a thousand,
+        and the run still reports success; a nan std turns the column to nan,
+        and an infinite one to 0. Opt-in, because a joint held still on purpose
+        reads the same; nothing is clamped. No local root, or stats that cannot
+        be read, leave the question open.
+        """
+        problems = self._min_std_problems(spec)
+        if problems or spec.min_std is None or not spec.dataset_root:
+            return problems
+        flat = _columns_below_min_std(spec.dataset_root, spec.min_std)
+        if not flat:
+            return []
+        shown = ", ".join(flat[:6]) + (", ..." if len(flat) > 6 else "")
+        return [
+            f"the dataset at '{spec.dataset_root}' has {len(flat)} control column(s) whose std is below "
+            f"min_std={spec.min_std:g} or not finite in meta/stats.json: {shown}. Mean-std normalization "
+            "divides by that std, which scales such a column far out of range or turns it to nan or 0, and "
+            "the run would report success anyway. Re-record with those joints actuated, drop them from the "
+            "recorded features, or lower min_std if they are meant to be still (no min_std passes a nan or "
+            "infinite std)."
         ]
 
     def _dataset_codebase_version_problems(self, spec: TrainSpec) -> list[str]:
@@ -2231,8 +2309,6 @@ class LerobotTrainer(Trainer):
         if latest_epoch is not None:
             metrics["latest_epoch"] = latest_epoch
         if latest_loss is not None:
-            import math
-
             metrics["latest_loss"] = latest_loss
             metrics["learning"] = math.isfinite(latest_loss)
         metrics["liveness_ok"] = latest_step is not None

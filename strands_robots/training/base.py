@@ -102,6 +102,21 @@ class TrainSpec:
             fraction whose ceiling lerobot takes. A backend MUST make the
             reserved episodes produce a validation signal, not merely shrink
             the training set.
+        min_std: Smallest aggregate ``std`` an ``action`` /
+            ``observation.state`` column may have, or ``None`` (the default) to
+            train on whatever the data holds. A positive finite number: ``0``
+            is refused, not read as off, unlike ``verify-dataset --min-std 0``,
+            which switches that command's advice off (its default is
+            ``strands_robots.dataset_metadata.NEAR_CONSTANT_STD``, ``1e-3``). A
+            backend that reads it refuses a dataset with a column below it, or
+            whose ``std`` is nan or infinite, because ``MEAN_STD``
+            normalization divides by ``std + 1e-8``; the data is not changed.
+            Opt-in: a joint held still on purpose reads the same. Per-column
+            and per-policy grading are non-goals: no column can be exempted, so
+            one held still on purpose passes only by lowering or unsetting
+            ``min_std`` for the whole dataset, and every control column is
+            graded even for a policy that normalizes it with ``MIN_MAX``,
+            quantiles or ``IDENTITY``, none of which divides by ``std``.
         augmentation: Backend-specific data augmentation (Cosmos dataset
             filter dict).
         fps: Dataset control rate, when a backend needs it explicitly.
@@ -137,6 +152,7 @@ class TrainSpec:
     tune: dict[str, bool] = field(default_factory=dict)
     # --- data ---
     val_episodes: int | None = None
+    min_std: float | None = None
     augmentation: dict[str, Any] | None = None
     fps: int | None = None
     streaming: bool = False
@@ -327,6 +343,12 @@ class Trainer(ABC):
         from strands_robots.training._validate import validation_episodes_problems
 
         return validation_episodes_problems(spec, context=self.provider_name)
+
+    def _min_std_problems(self, spec: TrainSpec) -> list[str]:
+        """Preflight ``min_std`` when supplied: a positive finite number."""
+        from strands_robots.training._validate import min_std_problems
+
+        return min_std_problems(spec, context=self.provider_name)
 
     def _resume_problems(self, spec: TrainSpec) -> list[str]:
         """Preflight ``resume``: a ``bool``."""
