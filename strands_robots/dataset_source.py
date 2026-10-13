@@ -18,10 +18,11 @@ for, or re-derives -- and a re-derived dataset directory is a read that misses
 the write.
 
 They earn ``core`` by their dependencies: the standard library,
-:func:`~strands_robots._dyld.quiet_video_backend` and
-:func:`~strands_robots.utils.non_negative_whole_number_error`, plus LeRobot
-itself, imported inside the two functions that need it so a machine without it
-still resolves a local path.
+:func:`~strands_robots._dyld.quiet_video_backend`,
+:func:`~strands_robots.utils.non_negative_whole_number_error` and
+:func:`~strands_robots.utils.url_scheme`, plus LeRobot itself, imported inside
+the two functions that need it so a machine without it still resolves a local
+path.
 """
 
 from __future__ import annotations
@@ -30,9 +31,10 @@ import inspect
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from strands_robots._dyld import quiet_video_backend
-from strands_robots.utils import non_negative_whole_number_error
+from strands_robots.utils import non_negative_whole_number_error, url_scheme
 
 
 def _quiet_backend_kwargs(dataset_cls: Any) -> dict[str, Any]:
@@ -113,6 +115,62 @@ DATASET_DIR_HOLDS_CALLER_FILES = (
 )
 
 
+def dataset_url_error(value: str | os.PathLike[str], what: str) -> str | None:
+    """Why ``value`` cannot be a writer's dataset root or id, or ``None``.
+
+    ``Path`` reads a URL as a *relative* path - ``Path("s3://b/k")`` is
+    ``s3:/b/k`` - so without this a bucket URI is neither honoured nor refused
+    up front: as a root it becomes a folder named after the scheme under the
+    working directory, which LeRobot creates and whose first save then fails,
+    and as an id with no root, a dataset under ``$HF_LEROBOT_HOME`` that
+    nothing uploads. Only the string form is caught: ``Path("s3://b/k")`` has
+    already collapsed to ``s3:/b/k`` before it gets here.
+
+    Public for the reason :data:`HUB_ID_OUTSIDE_HOME` is a constant: the
+    refusal's wording lives in one place, so a caller reporting it and a test
+    reading it do not restate it.
+
+    Args:
+        value: The ``root`` or ``repo_id`` a caller passed.
+        what: ``"id"`` or ``"root"``, named in the refusal so a caller who
+            passed both can tell which one carried the URL.
+
+    Returns:
+        The refusal - naming the value, the local path ``Path()`` reads it as,
+        and the remedy, or for a ``file://`` URL naming a path on this machine
+        that path to pass instead - or ``None`` for any value that is not a
+        URL, which is every local path (a Windows drive path such as
+        ``C://data/run`` among them) and every ``owner/name`` Hub id.
+    """
+    text = os.fspath(value)
+    # Read past leading whitespace, as the policy resolver strips its input:
+    # " s3://b/k" is a URL too, not a folder named " s3:".
+    stripped = text.lstrip()
+    scheme = url_scheme(stripped)
+    # A one-letter scheme is a Windows drive letter: C://data/run is a path.
+    if scheme is None or len(scheme) == 1:
+        return None
+    # Refused, not converted: the readers take this root as a path, so a
+    # converted URL would record into one directory and read back from another.
+    # A host is case-insensitive (RFC 3986): file://LOCALHOST/ is this machine too.
+    if scheme.lower() == "file" and (parts := urlsplit(stripped)).netloc.lower() in ("", "localhost"):
+        # Deferred: urllib.request pulls in http.client and hashlib, and only
+        # this refusal reads it.
+        from urllib.request import url2pathname
+
+        # A URL with no path (file://, file://localhost) has none to pass
+        # instead, so it gets the refusal below, as any other URL does.
+        if path := url2pathname(parts.path):
+            return f"The dataset {what} {text!r} is a file:// URL, and a recording takes a path: pass {path!r} instead."
+    return (
+        f"The dataset {what} {text!r} opens with the URL scheme {scheme}://, and a recording is "
+        f"written to a local directory: Path() reads this value as the relative path "
+        f"{str(Path(text))!r}, not the store it names. Record to a local root, then upload the "
+        "finished directory - sync_to_bucket() for a Hugging Face Storage Bucket, push_to_hub() "
+        "for a Hub dataset repo, or your own transfer for any other store."
+    )
+
+
 def _holds_caller_files(directory: Path) -> bool:
     """Whether ``directory`` is, or contains, the working or home directory.
 
@@ -184,8 +242,10 @@ def resolve_dataset_dir(repo_id: str, root: str | None = None) -> Path:
 
     Raises:
         ValueError: An empty or non-string ``repo_id``; a ``root`` that is
-            neither ``None`` nor a path; an ``owner/name`` id
-            whose segments would leave the dataset home
+            neither ``None`` nor a path; a ``repo_id`` or ``root`` that is a URL
+            (:func:`dataset_url_error`), which ``Path`` would read as a local
+            directory the URL does not name; an ``owner/name`` id whose
+            segments would leave the dataset home
             (:data:`HUB_ID_OUTSIDE_HOME`); or a directory that is, or contains,
             the working or home directory (:data:`DATASET_DIR_HOLDS_CALLER_FILES`)
             - a writer replaces its target, so that would delete the caller's files.
@@ -194,6 +254,15 @@ def resolve_dataset_dir(repo_id: str, root: str | None = None) -> Path:
         raise ValueError(f"The dataset id must be a non-empty string (got {repo_id!r}).")
     if root is not None and not isinstance(root, str | os.PathLike):
         raise ValueError(f"The dataset root must be a path string or None (got {root!r}).")
+    # Both inputs, and not only the one the directory comes from. A URL id
+    # beside a usable root would record into that root, but it names no Hub
+    # repo: huggingface_hub refuses a URL as a repo id, so push_to_hub() fails
+    # once the episodes are in. So it is refused up front too - the same choice
+    # the empty-id guard above makes, and one rule with no exemptions needs no
+    # model of which input wins.
+    for what, value in (("id", repo_id), ("root", root)):
+        if value is not None and (url_error := dataset_url_error(value, what)) is not None:
+            raise ValueError(url_error)
     if root:
         directory = Path(root)
     elif (local := local_dataset_dir(repo_id)) is not None:

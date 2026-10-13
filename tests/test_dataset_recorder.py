@@ -2437,6 +2437,149 @@ def test_resolve_dataset_dir_keeps_a_hub_id_under_the_dataset_home(tmp_path, mon
     assert dataset_source.resolve_dataset_dir("owner//name") == tmp_path / "home" / "owner" / "name"
 
 
+# A root or an id that names a remote store, one per scheme a caller reaches
+# for: the two object stores, the bucket URI ``sync_to_bucket`` itself prints,
+# and a plain web URL. Then four that read as something else: a URL behind the
+# leading space a pasted value carries, a file URL naming another host, and two
+# file URLs on this machine that name no path, so there is none to pass instead.
+DATASET_STORE_URLS = [
+    "s3://probe-bucket/datasets/run1",
+    "gs://probe-bucket/datasets/run1",
+    "hf://buckets/org/collection/run1",
+    "https://example.invalid/datasets/run1",
+    " s3://b/k",
+    "file://gpu-box/datasets/run1",
+    "file://",
+    "file://localhost",
+]
+
+
+class _FakeDatasetMkdirCreate(_FakeDatasetOverwriteCreate):
+    """create() makes its root as ``LeRobotDataset.create`` does: ``mkdir(parents=True)``."""
+
+    @classmethod
+    def create(
+        cls, repo_id, fps=30, root=None, robot_type="unknown", features=None, use_videos=True, image_writer_threads=4
+    ):
+        Path(root).mkdir(parents=True)
+        return super().create(repo_id, fps=fps, root=root)
+
+
+@pytest.mark.parametrize("url", DATASET_STORE_URLS, ids=repr)
+def test_resolve_dataset_dir_refuses_a_url_as_the_root_and_as_the_id(tmp_path, monkeypatch, url):
+    """Every facet of one URL, on both inputs, in one cell.
+
+    ``Path`` reads a URL as a *relative* path - ``Path("s3://b/k")`` is
+    ``s3:/b/k`` - so a bucket URI was neither honoured nor refused up front: as
+    a ``root`` it resolved to a folder named ``s3:`` under the working
+    directory, which ``LeRobotDataset.create`` mkdir()s with ``parents=True``
+    and whose first save then failed; as an id with no root, to the same path
+    under ``$HF_LEROBOT_HOME``, where the episodes were written and nothing
+    uploads them. So the refusal has to name the value, the local path
+    ``Path()`` reads it as, and where the recording should go instead; a
+    verdict alone leaves a caller with a bucket URI and nowhere to record.
+    """
+    from strands_robots import dataset_source
+
+    monkeypatch.setattr(dataset_source, "_lerobot_home", lambda: tmp_path / "home")
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(ValueError) as as_root:
+        dataset_source.resolve_dataset_dir("local/probe", url)
+    with pytest.raises(ValueError) as as_id:
+        dataset_source.resolve_dataset_dir(url)
+    # An id is refused beside a usable local root too: one rule for both inputs.
+    with pytest.raises(ValueError) as as_id_beside_a_root:
+        dataset_source.resolve_dataset_dir(url, str(tmp_path / "dataset"))
+
+    # The folder Path() names after the scheme keeps a leading space; the
+    # scheme the refusal names does not.
+    prefix = url.split("://", 1)[0]
+    scheme = prefix.lstrip()
+    for what, refusal in (("root", as_root), ("id", as_id), ("id", as_id_beside_a_root)):
+        text = str(refusal.value)
+        assert text.startswith(f"The dataset {what} {url!r} opens with the URL scheme {scheme}://")
+        # The local path Path() reads it as, quoted on its own: the quoted URL
+        # contains "s3:/" too, so only the clause that names the path matches.
+        assert repr(str(Path(url))) in text
+        # And the remedy, which is a two-step: record locally, then upload.
+        assert "Record to a local root" in text
+        assert "sync_to_bucket()" in text
+
+    # The writer refuses before LeRobot is reached. The fake creates its root
+    # as LeRobot does, so a URL let through would leave a folder named after
+    # the scheme in the working directory (as a root) or the dataset home (as
+    # an id).
+    _patch_lerobot_dataset(monkeypatch, _FakeDatasetMkdirCreate)
+    with pytest.raises(ValueError, match="opens with the URL scheme"):
+        DatasetRecorder.create("local/probe", root=url, joint_names=["j1"])
+    with pytest.raises(ValueError, match="opens with the URL scheme"):
+        DatasetRecorder.create(url, root=None, joint_names=["j1"])
+    assert not (tmp_path / f"{prefix}:").exists()
+    assert not (tmp_path / "home").exists()
+
+
+def test_resolve_dataset_dir_keeps_a_local_path_that_merely_mentions_a_scheme(tmp_path, monkeypatch):
+    """The refusal reads a URL scheme, not the letters it is made of.
+
+    ``:`` is a legal character in a POSIX directory name, so these are local
+    paths and the writer must keep resolving them: the rule is RFC 3986's
+    ``scheme://`` prefix and nothing looser. A one-letter scheme is a Windows
+    drive letter (``C://data/run`` is a valid drive path there), so a dataset
+    root reads it as a path, though the shared scheme reader does not.
+    """
+    from strands_robots import dataset_source
+
+    monkeypatch.setattr(dataset_source, "_lerobot_home", lambda: tmp_path / "home")
+
+    local_paths = (
+        "s3:/bucket/run1",
+        "s3:run1",
+        "run_s3://x",
+        "./s3/run1",
+        str(tmp_path / "s3:bucket"),
+        "C://data/run",
+        "c://x",
+    )
+    for local in local_paths:
+        assert dataset_source.dataset_url_error(local, "root") is None
+        assert dataset_source.resolve_dataset_dir("local/probe", local) == Path(local)
+    # An ``owner/name`` id and a local id are untouched by the new rule.
+    assert dataset_source.resolve_dataset_dir("owner/name") == tmp_path / "home" / "owner" / "name"
+    assert dataset_source.resolve_dataset_dir("my_local_dataset") == Path("my_local_dataset")
+
+
+def test_resolve_dataset_dir_refuses_a_file_url_naming_the_path_to_pass_instead(tmp_path, monkeypatch):
+    """A ``file://`` URL on this machine names a local directory, so its refusal names that directory.
+
+    ``file:///tmp/run1`` is ``/tmp/run1``, and the upload remedy the other
+    schemes get would send the caller to a store they never meant. It is
+    refused rather than converted: the readers take the same ``root`` as a
+    path, so a converted URL would record into ``/tmp/run1`` and read back from
+    ``file:/tmp/run1``. ``localhost`` is this machine too (RFC 8089), in any
+    case, since a host is case-insensitive (RFC 3986). A file URL naming
+    another host is a remote store, and one naming no path (``file://``) has no
+    path to pass instead: both are among ``DATASET_STORE_URLS``.
+    """
+    from strands_robots import dataset_source
+
+    monkeypatch.setattr(dataset_source, "_lerobot_home", lambda: tmp_path / "home")
+
+    # The space is percent-encoded in the URL, and decoded in the path named.
+    run = tmp_path / "my run"
+    for host in ("", "localhost", "LOCALHOST"):
+        url = run.as_uri().replace("file://", f"file://{host}", 1)
+        with pytest.raises(ValueError) as as_root:
+            dataset_source.resolve_dataset_dir("local/probe", url)
+        with pytest.raises(ValueError) as as_id:
+            dataset_source.resolve_dataset_dir(url)
+        for what, refusal in (("root", as_root), ("id", as_id)):
+            text = str(refusal.value)
+            assert text.startswith(f"The dataset {what} {url!r} is a file:// URL"), text
+            assert f"pass {str(run)!r} instead" in text, text
+            assert "sync_to_bucket()" not in text, text
+
+
 def test_create_raises_clear_error_on_existing_dataset_without_overwrite(tmp_path, monkeypatch):
     """create() on an existing LeRobotDataset dir (has meta/) and no overwrite
     raises a clear FileExistsError naming overwrite= and resume() - not a bare
