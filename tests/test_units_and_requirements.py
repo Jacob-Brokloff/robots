@@ -1,6 +1,6 @@
 """Units belong to the policy's dataset; a policy declares its needs (experiments/SMOLVLA.md in the reference).
 
-The ``Robot.run`` halves of these findings land with the Robot class; here are the pure parts.
+The pure parts first, then what ``Robot.run`` does with them.
 """
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from strands_robots import Description, JointState, Observation, Requirements
+from strands_robots import Description, JointState, Observation, Policy, Requirements, Robot, Simulation
 from strands_robots.units import Units, declared_units, resolve_units
 
 
@@ -82,3 +82,77 @@ def test_requirements_refuse_naming_what_is_missing(obs, refusal):
         return
     with pytest.raises(ValueError, match=refusal):
         _THREE_CAMERAS.check(obs)
+
+
+# Robot.run and Simulation.run bind a policy the same way: one table, both loops.
+LOOPS = {
+    "robot.run": lambda arm, pol, steps: arm.run(pol, steps=steps),
+    "sim.run": lambda arm, pol, steps: arm.sim.run({arm: pol}, steps=steps),
+}
+loops = pytest.mark.parametrize("loop", LOOPS.values(), ids=LOOPS.keys())
+
+
+@pytest.fixture
+def arm():
+    with Simulation() as sim:
+        yield Robot("so101", sim=sim)
+
+
+class _HoldInLerobotUnits(Policy):
+    """A policy that speaks lerobot_so10x: it sees -100..100 and asks for the gripper half open (50)."""
+
+    units = "lerobot_so10x"
+
+    def __init__(self):
+        self.seen = []
+
+    def act(self, obs, *, instruction=None):
+        self.seen.append(obs.joints.positions.copy())
+        a = obs.joints.positions.copy()
+        a[-1] = 50.0
+        return a
+
+
+@loops
+def test_run_converts_both_directions_when_the_policy_declares_units(arm, loop):
+    pol = _HoldInLerobotUnits()
+    loop(arm, pol, 3)
+    assert all(abs(s[:-1]).max() <= 100 for s in pol.seen) and 0 <= pol.seen[0][-1] <= 100  # it saw bus units
+    loop(arm, pol, 20)
+    assert abs(arm.observe()["gripper"] - 0.785) < 0.15  # the arm got radians: 50 is half of 0..1.745 rad, not 50 rad
+
+
+class _Needs(Policy):
+    def __init__(self, req):
+        self.req = req
+
+    def requirements(self):
+        return self.req
+
+    def act(self, obs, *, instruction=None):
+        self.saw = sorted(obs.images)
+        return obs.joints.positions
+
+
+@loops
+def test_run_refuses_before_inference_naming_the_missing_camera(arm, loop):
+    with pytest.raises(ValueError, match=r"needs camera\(s\) \['camera1', 'camera2', 'camera3'\]"):
+        loop(arm, _Needs(_THREE_CAMERAS), 1)
+    for i, size in ((1, (256, 256)), (2, (320, 240)), (3, (64, 64))):
+        arm.sim.camera(f"camera{i}", size=size, attach=arm)
+    with pytest.raises(ValueError, match="camera2: has 320x240, needs 256x256"):
+        loop(arm, _Needs(_THREE_CAMERAS), 1)
+
+
+@loops
+def test_run_passes_when_the_requirements_are_met_and_the_policy_sees_the_cameras(arm, loop):
+    for i in (1, 2, 3):
+        arm.sim.camera(f"camera{i}", size=(256, 256), attach=arm)
+    pol = _Needs(_THREE_CAMERAS)
+    loop(arm, pol, 2)
+    assert pol.saw == ["camera1", "camera2", "camera3"]
+
+
+def test_run_names_a_state_length_mismatch():
+    with Simulation() as sim, pytest.raises(ValueError, match="expects a 6-dim state, the robot reports"):
+        Robot("g1", sim=sim).run(_Needs(Requirements(state_dim=6)), steps=1)
