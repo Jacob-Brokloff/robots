@@ -17,13 +17,19 @@ dependencies = [
 [project.optional-dependencies]
 mujoco = ["mujoco>=3.3.4"]
 feetech = ["pyserial>=3.5"]
-dev = ["pytest>=8", "pytest-timeout", "ruff>=0.6", "mypy>=1.10", "import-linter>=2.1"]
+# ONNX policies (holosoma, microduck presets): CPU inference, weights fetched from the Hugging Face Hub.
+onnx = ["onnxruntime>=1.18", "huggingface_hub>=0.24"]
+# LeRobot policies, local or over Zenoh (Python 3.12). remote_inference is on LeRobot main only (0.6.1 on PyPI
+# predates it) and a wheel cannot carry a git reference, so LeRobot itself is installed by hand: see _extras.LEROBOT.
+# zenoh <1.10: 1.10.0 regressed peer-mode liveliness.
+lerobot = ["eclipse-zenoh>=1.9.0,<1.10.0 ; python_version >= '3.12'"]
+dev = ["pytest>=8", "pytest-timeout", "ruff>=0.6", "mypy>=1.10", "import-linter>=2.1", "onnx>=1.16"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["strands_robots"]
 
 [tool.hatch.envs.default]
-features = ["dev", "mujoco"]
+features = ["dev", "mujoco", "onnx"]
 
 [tool.hatch.envs.default.scripts]
 lint = [
@@ -34,6 +40,15 @@ lint = [
 ]
 format = ["ruff check --fix strands_robots tests tests_integ", "ruff format strands_robots tests tests_integ"]
 test = "pytest {args}"
+
+# The LeRobot policy tests need the [lerobot] extra (torch, Python 3.12): `hatch run lerobot:test`.
+[tool.hatch.envs.lerobot]
+python = "3.12"
+features = ["dev", "mujoco", "lerobot"]
+dependencies = ["lerobot[remote] @ git+https://github.com/huggingface/lerobot@53feaef37b67e8f4c23b6953e880ff535e39d6fe"]
+
+[tool.hatch.envs.lerobot.scripts]
+test = "pytest tests/policy tests/test_policy_factory.py tests/test_units_lerobot_modes.py {args}"
 
 [tool.ruff]
 line-length = 120

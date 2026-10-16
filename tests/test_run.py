@@ -51,6 +51,8 @@ def test_run_needs_a_bound_and_valid_hz():
         arm.run(lambda o: o.joints.positions)
     with pytest.raises(ValueError, match="hz"):
         arm.run(lambda o: o.joints.positions, hz=0, steps=1)
+    with pytest.raises(ValueError, match="hz"):  # refused before the spec is resolved, so nothing is loaded
+        arm.run("zenoh://127.0.0.1:1/nobody", hz=-1, steps=1)
 
 
 def test_start_stop_background_task():
@@ -113,3 +115,24 @@ def test_act_takes_the_joints_an_observation_measured():
     assert arm.coerce(measured) == pytest.approx(measured.positions)  # a hold at what was read
     with pytest.raises(KeyError, match="unknown joint"):
         arm.coerce(JointState.zeros(["shoulder_pan", "not_a_joint"]))
+
+
+class _At30(SequencePolicy):
+    hz = 30.0
+
+
+def test_both_loops_replay_at_the_rate_the_policy_declares_and_refuse_another():
+    arm = Robot("so101")
+    assert arm.run(_At30([{"shoulder_pan": 0.1}]), seconds=1).hz_target == 30.0
+    assert arm.sim.run({arm: _At30([{"shoulder_pan": 0.1}])}, seconds=1)[arm.id].hz_target == 30.0
+    with pytest.raises(ValueError, match="runs at 30 Hz; hz=50"):
+        arm.run(_At30([{"shoulder_pan": 0.1}]), hz=50, steps=1)
+    with pytest.raises(ValueError, match="runs at 30 Hz; hz=50"):
+        arm.sim.run({arm: _At30([{"shoulder_pan": 0.1}])}, hz=50, steps=1)
+    other = Robot("so101", id="so101_2")
+
+    class At20(SequencePolicy):
+        hz = 20.0
+
+    with pytest.raises(ValueError, match="different rates"):
+        arm.sim.run({arm: _At30([{"shoulder_pan": 0.1}]), other: At20([{"shoulder_pan": 0.1}])}, steps=1)
