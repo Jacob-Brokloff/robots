@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from ...policy.base import PolicyFault
 from ...types import Observation
+from ..safety import EStopped
 from .bind import Bound, bind, decide, release
 from .result import RunResult
 from .task import Task
@@ -40,10 +41,26 @@ def run(
     if hz is not None and hz <= 0:
         raise ValueError(f"hz must be > 0, got {hz}")  # before bind: a bad hz loads no checkpoint
     bound = bind(robot, policy, units)
+    _emit(robot, "run.started", {"policy": repr(bound.policy)})
     try:
-        return _loop(robot, bound, instruction, hz, seconds, steps, stop_when, realtime, stop_event)
+        result = _loop(robot, bound, instruction, hz, seconds, steps, stop_when, realtime, stop_event)
     finally:
         release(bound)
+    _announce(robot, result)
+    return result
+
+
+def _emit(robot: Robot, event: str, payload: dict[str, Any]) -> None:
+    events = getattr(robot, "events", None)
+    if events is not None:
+        events.emit(event, {"device_id": robot.id, **payload})
+
+
+def _announce(robot: Robot, result: RunResult) -> None:
+    """``run.stopped`` for every finished run, and ``fault`` first when a policy fault ended it."""
+    if result.fault is not None and result.stopped_by == "fault":
+        _emit(robot, "fault", {"reason": result.fault})
+    _emit(robot, "run.stopped", {"stopped_by": result.stopped_by, "steps": result.steps})
 
 
 def _declared(bounds: Iterable[Bound], hz: float | None) -> float | None:
@@ -87,7 +104,11 @@ def _loop(
     fault: str | None = None
     wall0 = _time.perf_counter()
     next_tick = wall0
+    stops0 = robot.estop_latch.count
     while True:
+        if robot.estopped or robot.estop_latch.count != stops0:  # an e-stop outranks a plain stop()
+            why = "estop"
+            break
         if stop_event is not None and stop_event.is_set():
             why = "stopped"
             break
@@ -102,7 +123,11 @@ def _loop(
         except PolicyFault as e:
             why, fault = "fault", str(e)
             break
-        robot.act(action, steps=sim_steps)
+        try:
+            robot.act(action, steps=sim_steps)
+        except EStopped:
+            why = "estop"
+            break
         n += 1
         if robot.sim is None or realtime:  # hardware (or a watched sim): pace in wall time
             next_tick += dt
@@ -143,10 +168,15 @@ def lockstep(
     try:
         for r, p in policies.items():
             bound[r] = bind(r, p, units)
-        return _lockstep(sim, bound, hz, seconds, steps, instruction)
+        for r, b in bound.items():
+            _emit(r, "run.started", {"policy": repr(b.policy)})
+        results = _lockstep(sim, bound, hz, seconds, steps, instruction)
     finally:
         for b in bound.values():
             release(b)
+    for r in bound:
+        _announce(r, results[r.id])
+    return results
 
 
 def _lockstep(
@@ -164,15 +194,22 @@ def _lockstep(
     total = steps if steps is not None else int(round(float(seconds or 0.0) / dt))
     realtime = any(getattr(b.policy, "realtime", False) for b in bound.values())
     faults: dict[str, str] = {}
+    stopped: list[Robot] = []
     t0, n, next_tick = sim.time, 0, _time.perf_counter()
+    stops0 = {r: r.estop_latch.count for r in bound}
     with sim.manual_time():
         for _ in range(total):
+            stopped = [r for r in bound if r.estopped or r.estop_latch.count != stops0[r]]
             for r, b in bound.items():
+                if stopped:
+                    break
                 try:
                     r.act(decide(r, b, r.observe(), instruction))
                 except PolicyFault as e:
                     faults[r.id] = str(e)
-            if faults:
+                except EStopped:
+                    stopped.append(r)
+            if faults or stopped:
                 break
             sim.step(per)
             n += 1
@@ -182,8 +219,9 @@ def _lockstep(
                 if time_left > 0:
                     _time.sleep(time_left)
     el = sim.time - t0
-    why = "fault" if faults else "steps"
+    why = "fault" if faults else ("estop" if stopped else "steps")
+    reason = f"e-stop engaged on {', '.join(r.id for r in stopped)}" if stopped else None
     return {
-        r.id: RunResult(n, el, 1.0 / dt, n / el if el else 0.0, why, None, r.observe(), faults.get(r.id))  # type: ignore[arg-type]
+        r.id: RunResult(n, el, 1.0 / dt, n / el if el else 0.0, why, None, r.observe(), faults.get(r.id, reason))  # type: ignore[arg-type]
         for r in bound
     }
