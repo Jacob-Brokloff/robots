@@ -1,9 +1,7 @@
 """``Mesh``: every device, anywhere. Mount a robot to make it a device; discover, invoke and subscribe to the rest.
 
-``Mesh("zenoh://", tenant="lab-a")`` joins the strands peers on the LAN with zero configuration;
-``Mesh(("zenoh://", "iot://us-west-2"))`` spans several transports with one id space.
-``Robot("so101", mesh=m)`` mounts a robot on ``m`` as soon as it is built.
-"""
+``Mesh("zenoh://", tenant="lab-a")`` joins the strands peers on the LAN with zero configuration; ``Mesh(("zenoh://",
+"iot://us-west-2"))`` spans several transports with one id space. ``Robot("so101", mesh=m)`` mounts it on ``m``."""
 
 from __future__ import annotations
 
@@ -11,6 +9,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import ExitStack
 from typing import Any
 
 from . import authority as _authority
@@ -19,6 +18,7 @@ from . import wire
 from .broadcast import broadcast, listen_estop, publish_estop
 from .codec import observation_from_dict
 from .device import Device, Selector
+from .iot.options import attach as _iot_attach
 from .presence import Directory, announce, refuse_shared, refuse_taken
 from .record import RAISE, check_kill_switch, default_operator, default_tenant, record, state_rate
 from .remote import RemoteBody
@@ -43,9 +43,8 @@ class Mesh:
         resume_key: Any = None,
         own_transports: bool = True,
     ) -> None:
-        """``tenant`` defaults to the user's own (``STRANDS_TENANT`` or the login name); ``operator`` (who this
-        process is when it stops or resumes) to ``user@host``. ``resume_authority`` decides who may resume the
-        devices mounted here; ``resume_key`` is this operator's private key for signed resumes."""
+        """``tenant`` defaults to ``STRANDS_TENANT`` or the login name; ``operator`` (who stops or resumes) to
+        ``user@host``. ``resume_authority`` decides who may resume devices mounted here; ``resume_key`` signs."""
         check_kill_switch()
         items = [transports] if isinstance(transports, str) or not isinstance(transports, Sequence) else transports
         self.tenant = wire.check_id(tenant or default_tenant(), "tenant")
@@ -75,33 +74,36 @@ class Mesh:
         labels: Mapping[str, str] | None = None,
         state_hz: float | None = None,
         watchdog_ms: float | None = 500.0,
+        iot: Any = None,
     ) -> Any:
-        """Make ``robot`` a device on every transport: announce it, answer its rpcs, publish its state (at
-        ``state_hz``, default the manifest's state rate) and events. Whoever moves it must keep talking within
-        ``watchdog_ms`` and stay present, or the device applies ``on_disconnect`` (``None``: no watchdog).
-        A ``Simulation`` mounts every robot in it and returns the list of Devices."""
+        """Make ``robot`` a device: announce it, answer its rpcs, publish its state and events; a mover silent past
+        ``watchdog_ms`` gets ``on_disconnect``. ``iot`` adds shadows. A ``Simulation`` mounts each robot in it."""
         from ..simulation import Simulation
 
         if isinstance(robot, Simulation):
-            kw = {"labels": labels, "state_hz": state_hz, "watchdog_ms": watchdog_ms}
+            kw = {"labels": labels, "state_hz": state_hz, "watchdog_ms": watchdog_ms, "iot": iot}
             return [self.mount(r, **kw) for r in robot.robots.values()]  # type: ignore[arg-type]
         did = wire.check_id(device_id or getattr(robot, "id", None) or robot.describe()["name"], "device_id")
-        with self._lock:
+        with ExitStack() as stack, self._lock:  # the stack unwinds a failed mount after the lock is released
             if did in self._mounted:
                 raise ValueError(f"device {did!r} is already mounted on this mesh")
             refuse_taken(self._dirs, did, self.tenant)
             rec = record(robot, did, labels or {}, self.tenant, tuple(ARGS))
             lockout = _authority.Lockout()
+            undo: list[Unsubscribe] = []
+            stack.callback(lambda: [u() for u in reversed(undo)])
+            undo += [] if iot is None else [_iot_attach(self.transports, iot, robot, rec, lockout)]
             dog = _watchdog.start(robot, watchdog_ms, self.transports, self.tenant)
-            on_rpc = None if dog is None else dog.on_rpc
-            auth = self._authority
-            undo = [serve(t, self.tenant, robot, did, lockout, auth, on_rpc) for t in self.transports]
+            stack.callback(_watchdog.stopper(dog))  # a failed mount stops it first; close is idempotent
+            on_rpc = getattr(dog, "on_rpc", None)
+            undo += [serve(t, self.tenant, robot, did, lockout, self._authority, on_rpc) for t in self.transports]
             undo.append(_watchdog.stopper(dog))
             if hasattr(robot, "subscribe"):
                 undo.append(publish(self.transports, self.tenant, robot, did, state_hz or state_rate(rec["manifest"])))
             undo += [announce(t, self.tenant, rec, self.peer_id) for t in self.transports]
             device = Device.from_dict({**rec, "last_seen": time.time()})
             self._mounted[did] = (robot, device, undo, lockout)
+            stack.pop_all()
         return device
 
     def unmount(self, device_id: str) -> None:
@@ -231,10 +233,8 @@ class Mesh:
         self._closed = True
         for did in list(self._mounted):
             self.unmount(did)
-        for u in self._subs:
-            u()
-        for directory in self._dirs:
-            directory.close()
+        for stop in [*self._subs, *(d.close for d in self._dirs)]:
+            stop()
         if self._own:
             for t in self.transports:
                 t.close()
