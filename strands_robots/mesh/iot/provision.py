@@ -11,8 +11,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from .. import wire
+from ..transports.pkcs11 import refuse_pin
 from .policy import POLICY_NAME, controller_policy, device_policy, group_name, policy_text
 
 
@@ -77,12 +79,22 @@ def teardown_tenant(iot: Any, tenant: str, *, policy: str = POLICY_NAME) -> None
 
 
 def register(
-    iot: Any, record: Mapping[str, Any], out_dir: str | Path, *, policy: str = POLICY_NAME, controller: bool = False
+    iot: Any,
+    record: Mapping[str, Any],
+    out_dir: str | Path,
+    *,
+    policy: str = POLICY_NAME,
+    controller: bool = False,
+    csr_pem: str | None = None,
+    key: str | None = None,
 ) -> dict[str, Any]:
     """A device's identity from its mesh ``record`` (id, device_type, tenant, labels): thing type, thing with
-    attributes, group membership, a certificate from a local CSR with the fleet policy (plus the controller policy
-    when ``controller``). Writes ``<out_dir>/<device_id>/{cert.pem,key.pem}`` (0600) and returns ids plus the
-    ``iot://`` query to use."""
+    attributes, group membership, a certificate from a CSR with the fleet policy (plus the controller policy when
+    ``controller``). By default the CSR is made locally and the key written to ``<out_dir>/<device_id>/key.pem``
+    (0600). Give ``csr_pem`` (a CSR whose key was generated in an HSM) and its ``key`` (a ``pkcs11:`` URI) to
+    register an identity whose private key is never a PEM: only ``cert.pem`` is written and the query's ``key=``
+    is the token URI. Returns ids plus the ``iot://`` query to use."""
+    _pair(csr_pem, key)
     did, dtype, tenant = str(record["id"]), str(record["device_type"]), str(record["tenant"])
     labels = {str(k): str(v)[:800] for k, v in (record.get("labels") or {}).items()}
     attrs, ttype = {"tenant": tenant, "device_type": dtype, **labels}, _segment(dtype)
@@ -90,30 +102,64 @@ def register(
     _exists(iot.create_thing, thingName=did, thingTypeName=ttype, attributePayload={"attributes": attrs})
     iot.update_thing(thingName=did, thingTypeName=ttype, attributePayload={"attributes": attrs, "merge": True})
     iot.add_thing_to_thing_group(thingGroupName=group_name(tenant), thingName=did)
-    cert, paths = _issue(iot, did, out_dir, [policy, f"{policy}-controller"] if controller else [policy])
-    query = f"client={did}&cert={paths['cert']}&key={paths['key']}"
+    policies = [policy, f"{policy}-controller"] if controller else [policy]
+    cert, paths = _issue(iot, did, out_dir, policies, csr_pem=csr_pem, key=key)
+    query = f"client={did}&cert={paths['cert']}&key={quote(paths['key'], safe='') if key else paths['key']}"
     return {"thing": did, "thing_type": ttype, "thing_group": group_name(tenant),
             "certificate_id": cert["certificateId"], **paths, "query": query}  # fmt: skip
 
 
-def rotate(iot: Any, device_id: str, out_dir: str | Path, *, policy: str = POLICY_NAME) -> dict[str, Any]:
+def rotate(
+    iot: Any,
+    device_id: str,
+    out_dir: str | Path,
+    *,
+    policy: str = POLICY_NAME,
+    csr_pem: str | None = None,
+    key: str | None = None,
+) -> dict[str, Any]:
     """A new certificate for ``device_id`` with the same CN and every policy its current ones carry (``policy`` if
-    none) over the old files; those stay ACTIVE until ``retire``, so the device reconnects first and nothing breaks."""
+    none) over the old files; those stay ACTIVE until ``retire``, so the device reconnects first and nothing breaks.
+    An identity registered with ``csr_pem``/``key`` rotates the same way (a CSR signed by its token key and the
+    unchanged URI); without them it is refused, so a software key never replaces the token's."""
+    _pair(csr_pem, key)
+    folder = Path(out_dir) / device_id
+    if csr_pem is None and (folder / "cert.pem").exists() and not (folder / "key.pem").exists():
+        raise ValueError(f"{device_id}'s key lives in a token: give rotate csr_pem (signed by it) and key (its URI)")
     arns = _principals(iot, device_id)
     names = {p["policyName"] for a in arns for p in iot.list_attached_policies(target=a).get("policies", [])}
-    cert, paths = _issue(iot, device_id, out_dir, sorted(names or {policy}))
+    cert, paths = _issue(iot, device_id, out_dir, sorted(names or {policy}), csr_pem=csr_pem, key=key)
     old = [a.rsplit("/", 1)[-1] for a in arns]
     return {"thing": device_id, "certificate_id": cert["certificateId"], "retire": old, **paths}
 
 
-def _issue(iot: Any, device_id: str, out_dir: str | Path, policies: list[str]) -> tuple[dict[str, Any], dict[str, str]]:
-    """A certificate from a local CSR, attached to the thing first (never an orphan), then to ``policies``."""
-    key_pem, csr_pem = csr(device_id)
+def _pair(csr_pem: str | None, key: str | None) -> None:
+    if (csr_pem is None) != (key is None):
+        raise ValueError("give both csr_pem (an HSM-generated CSR) and key (its pkcs11: URI), or neither")
+    refuse_pin(key or "")
+
+
+def _issue(
+    iot: Any,
+    device_id: str,
+    out_dir: str | Path,
+    policies: list[str],
+    *,
+    csr_pem: str | None = None,
+    key: str | None = None,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """A certificate from a CSR (made locally, or ``csr_pem`` when the key is an HSM-born ``key``), attached to
+    the thing first (never an orphan), then to ``policies``."""
+    key_pem: str | None
+    if csr_pem is None:
+        key_pem, csr_pem = csr(device_id)
+    else:
+        key_pem = None
     cert = iot.create_certificate_from_csr(certificateSigningRequest=csr_pem, setAsActive=True)
     iot.attach_thing_principal(thingName=device_id, principal=cert["certificateArn"])
     for name in policies:
         iot.attach_policy(policyName=name, target=cert["certificateArn"])
-    return cert, _write(Path(out_dir) / device_id, cert["certificatePem"], key_pem)
+    return cert, _write(Path(out_dir) / device_id, cert["certificatePem"], key_pem, key)
 
 
 def retire(iot: Any, device_id: str, certificate_ids: list[str]) -> list[str]:
@@ -164,10 +210,14 @@ def _segment(text: str) -> str:
     return "".join(ch if ch.isalnum() or ch in "_-." else "-" for ch in text)[:128] or "device"
 
 
-def _write(folder: Path, cert_pem: str, key_pem: str) -> dict[str, str]:
+def _write(folder: Path, cert_pem: str, key_pem: str | None, key_uri: str | None = None) -> dict[str, str]:
     folder.mkdir(parents=True, exist_ok=True)
-    cert, key = folder / "cert.pem", folder / "key.pem"
+    cert = folder / "cert.pem"
     cert.write_text(cert_pem)
+    if key_pem is None:  # HSM-born key: nothing private is ever a PEM on disk
+        assert key_uri is not None  # register requires key with csr_pem
+        return {"cert": str(cert), "key": key_uri}
+    key = folder / "key.pem"
     key.write_text(key_pem)
     key.chmod(0o600)
     return {"cert": str(cert), "key": str(key)}

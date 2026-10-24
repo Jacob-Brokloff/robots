@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from strands_robots.mesh.iot import provision
 
 ACCOUNT, REGION = "123456789012", "us-west-2"  # placeholders, as in conftest
@@ -87,3 +89,59 @@ def test_revoke_with_a_mesh_estops_the_connected_device_before_its_certificate_g
         operator.close()
         device.close()
         arm.close()
+
+
+def test_register_with_an_hsm_csr_writes_no_key_pem(aws, tmp_path):
+    from urllib.parse import parse_qs
+
+    provision.setup_tenant(aws, "lab", region=REGION, account=ACCOUNT)
+    _, csr_pem = provision.csr("arm-9")  # stands in for a CSR whose key was generated in an HSM
+    rec = {**RECORD, "id": "arm-9"}
+    key_uri = "pkcs11:token=lab;object=arm-9?module-path=/opt/hsm.so"
+    out = provision.register(aws, rec, tmp_path, csr_pem=csr_pem, key=key_uri)
+    assert not (tmp_path / "arm-9" / "key.pem").exists()  # nothing private is a PEM on disk
+    assert (tmp_path / "arm-9" / "cert.pem").exists()
+    assert out["key"] == key_uri
+    assert parse_qs(out["query"])["key"][0] == key_uri  # url-decoded back to the token URI
+    assert aws.describe_certificate(certificateId=out["certificate_id"])["certificateDescription"]["status"] == "ACTIVE"
+
+
+def test_register_refuses_a_key_uri_carrying_its_pin_before_issuing(aws, tmp_path):
+    provision.setup_tenant(aws, "lab", region=REGION, account=ACCOUNT)
+    key_uri = "pkcs11:token=lab;object=arm-9?module-path=/opt/hsm.so&pin-value=5678"
+    with pytest.raises(ValueError, match="PKCS11_PIN"):
+        provision.register(aws, {**RECORD, "id": "arm-9"}, tmp_path, csr_pem=provision.csr("arm-9")[1], key=key_uri)
+    assert not (tmp_path / "arm-9").exists() and aws.list_certificates()["certificates"] == []
+
+
+def test_register_needs_both_an_hsm_csr_and_its_key_uri(aws, tmp_path):
+    with pytest.raises(ValueError, match="both"):
+        provision.register(aws, RECORD, tmp_path, csr_pem="a-csr")
+    with pytest.raises(ValueError, match="both"):
+        provision.register(aws, RECORD, tmp_path, key="pkcs11:token=lab;object=arm-1")
+
+
+def test_rotate_refuses_an_hsm_identity_without_a_new_csr(aws, tmp_path):
+    provision.setup_tenant(aws, "lab", region=REGION, account=ACCOUNT)
+    _, csr_pem = provision.csr("arm-9")
+    key_uri = "pkcs11:token=lab;object=arm-9?module-path=/opt/hsm.so"
+    out = provision.register(aws, {**RECORD, "id": "arm-9"}, tmp_path, csr_pem=csr_pem, key=key_uri)
+    cert_before = (tmp_path / "arm-9" / "cert.pem").read_text()
+    with pytest.raises(ValueError, match="csr_pem"):
+        provision.rotate(aws, "arm-9", tmp_path)
+    assert sorted(p.name for p in (tmp_path / "arm-9").iterdir()) == ["cert.pem"]  # no software key written
+    assert (tmp_path / "arm-9" / "cert.pem").read_text() == cert_before  # the link still matches the token key
+    assert [a.rsplit("/", 1)[-1] for a in aws.list_thing_principals(thingName="arm-9")["principals"]] == [
+        out["certificate_id"]
+    ]  # nothing issued
+
+
+def test_rotate_an_hsm_identity_with_a_csr_signed_by_its_token_key(aws, tmp_path):
+    provision.setup_tenant(aws, "lab", region=REGION, account=ACCOUNT)
+    key_uri = "pkcs11:token=lab;object=arm-9?module-path=/opt/hsm.so"
+    out = provision.register(aws, {**RECORD, "id": "arm-9"}, tmp_path, csr_pem=provision.csr("arm-9")[1], key=key_uri)
+    rot = provision.rotate(aws, "arm-9", tmp_path, csr_pem=provision.csr("arm-9")[1], key=key_uri)
+    assert sorted(p.name for p in (tmp_path / "arm-9").iterdir()) == ["cert.pem"]
+    assert rot["key"] == key_uri and rot["retire"] == [out["certificate_id"]]
+    with pytest.raises(ValueError, match="both"):
+        provision.rotate(aws, "arm-9", tmp_path, csr_pem="a-csr")
