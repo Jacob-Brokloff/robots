@@ -4,17 +4,24 @@ Personal fork for the wireless XLeRobot teleop POC. Upstream package code is unt
 adds `deploy/`, `scripts/teleop_xlerobot.py`, `scripts/agent.py`, this file and `plan.md` (the
 hand-off doc with checkpoint status). Upstream conventions live in `AGENTS.md`.
 
-Git: `upstream` = https://github.com/strands-labs/robots, branch `main`. `origin` (the fork
-`Jacob-Brokloff/robots`) is not created yet; see `plan.md` CP0.
+Git: `origin` = https://github.com/Jacob-Brokloff/robots, `upstream` = https://github.com/strands-labs/robots,
+branch `main`.
 
 ## Hosts
 
 | Host | Address | Role |
 |---|---|---|
 | Arch desktop | 192.168.1.162 | leader arms, `robot-client` container (`deploy/desktop/`) |
-| XLeRobot Pi | `PI_IP` (TBD, WiFi) | `xlerobot_host` systemd service (`deploy/pi/`) |
-| Proxmox VM `strands-control` | TBD | Zenoh hub, dashboard, agent (`deploy/vm/`) |
-| RunPod pod | TBD | vLLM, OpenAI-compatible `/v1` |
+| XLeRobot Pi `Woodside` | 192.168.1.114 (WiFi), `ssh xlerobot` (user `woodside`, key in `~/.ssh/config`) | `xlerobot-host` systemd *user* unit (`deploy/pi/`); Debian 13, Python 3.13 |
+| Proxmox host `pve` | https://192.168.1.78:8006 | VMs 100 claude-agent, 101 codex-agent, **102 strands-control** |
+| VM `strands-control` (102) | 192.168.1.82 (DHCP), `ssh jbit@192.168.1.82` (desktop key) | Zenoh hub, dashboard, agent (`deploy/vm/`), clone at `~/robots`; Debian 13, 4 vCPU / 8 GB / 40 GB on truenas-nfs |
+| RunPod pod `strands-vllm` | id `vo7awa4r5uk3x1`, SSH `root@69.30.85.107 -p 22159` (VM key only) | 1x A40, $0.60/hr; vLLM 0.11.0 serving `Qwen/Qwen3-32B-AWQ` on pod `127.0.0.1:8000` |
+
+The pod's vLLM is not exposed publicly. The VM reaches it through the `runpod-vllm-tunnel`
+systemd service (`ssh -L 127.0.0.1:8000:127.0.0.1:8000`); after a pod restart, update
+`POD_HOST`/`POD_PORT` in `/etc/default/runpod-vllm-tunnel` on the VM. On the pod:
+`/workspace/serve.sh` (log `/workspace/vllm.log`; transformers pinned to 4.57.1 for vLLM 0.11).
+**Stop the pod in the RunPod console when not in use.**
 
 ## Ports
 
@@ -23,7 +30,8 @@ Git: `upstream` = https://github.com/strands-labs/robots, branch `main`. `origin
 | 5555 | ZMQ PULL, commands to the robot | Pi (`xlerobot_host`) |
 | 5556 | ZMQ PUSH, observations from the robot | Pi |
 | 7447 | Zenoh mesh | VM listens (`ZENOH_LISTEN=tcp/0.0.0.0:7447`), desktop dials it |
-| 8090 | Strands dashboard (`strands-robots dashboard`) | VM |
+| 8090 | Strands dashboard (`strands-robots dashboard`, `DASHBOARD_AUTH_TOKEN` in VM `deploy/.env`) | VM |
+| 8000 | vLLM OpenAI API, via SSH tunnel | VM `127.0.0.1` only |
 
 ## Serial devices (desktop)
 
@@ -33,7 +41,17 @@ Git: `upstream` = https://github.com/strands-labs/robots, branch `main`. `origin
 | `/dev/serial/by-id/usb-1a86_USB_Single_Serial_5B90040979-if00` | ttyACM1 | CH343 | leader arm, side TBD (CP1) |
 | `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` | ttyUSB0 | CH340 | not used by the POC |
 
-`deploy/.env.example` assumes 5B79017318 = left, 5B90040979 = right until CP1 confirms it.
+Confirmed: 5B79017318 = **left**, 5B90040979 = **right** (motor homing offsets match the
+calibration files, and the Woodside profile agrees).
+
+## Serial devices (Pi follower buses)
+
+| by-id path | tty | Bus |
+|---|---|---|
+| `/dev/serial/by-id/usb-1a86_USB_Single_Serial_5B8E114351-if00` | ttyACM1 | `port1`: left arm + head |
+| `/dev/serial/by-id/usb-1a86_USB_Single_Serial_5B91027960-if00` | ttyACM0 | `port2`: right arm + 2 wheels |
+
+Do not rely on the upstream default `port1=/dev/ttyACM0`; on this Pi it would swap the arms.
 
 ## Calibration IDs
 
@@ -44,10 +62,9 @@ Git: `upstream` = https://github.com/strands-labs/robots, branch `main`. `origin
 
 `bi_so_leader` with `id=leader` derives the arm ids `leader_left` / `leader_right` itself
 (`SOLeaderConfig` has no `id`), so calibrate each arm as a plain `so101_leader` with those ids;
-the two-device fallback reads the same files. An older calibration for board 5B79017318 exists
-in that dir as `woodside-leader-5B79017318.json`; copy it to `leader_<side>.json` instead of
-recalibrating if it is still valid for that arm.
-| `my_xlerobot_pc` | XLeRobot follower (Pi) | on the Pi under `~/.cache/huggingface/lerobot/calibration/robots/xlerobot/`; the id is hardcoded in upstream `xlerobot_host.main()` |
+the two-device fallback reads the same files. `leader_left.json` / `leader_right.json` are
+copies of the existing `woodside-leader-5B79017318.json` / `JBit Arm.json` (originals kept).
+| `woodside` | XLeRobot 2-wheel follower (Pi) | Pi `~/.cache/huggingface/lerobot/calibration/robots/xlerobot_2wheels/woodside.json` (all 16 motors) |
 
 ## Env vars (`deploy/.env`, copied from `deploy/.env.example`, gitignored)
 
@@ -79,12 +96,13 @@ docker compose -f deploy/desktop/docker-compose.yml run --rm robot-client lerobo
 docker compose -f deploy/desktop/docker-compose.yml run --rm robot-client python scripts/teleop_xlerobot.py
 ```
 
-Pi:
+Pi (the host needs both motor buses, which `woodside-supervisor` holds while it runs):
 
 ```bash
-scp -r deploy/pi <user>@<pi>:~/strands-pi && ssh <user>@<pi> 'bash ~/strands-pi/install.sh'
-sudo systemctl enable --now xlerobot-host && journalctl -u xlerobot-host -f   # "Waiting for commands..."
-nc -zv $PI_IP 5555 5556                                                      # from the desktop
+scp -r deploy/pi xlerobot:strands-pi && ssh xlerobot 'bash ~/strands-pi/install.sh'   # installed already
+ssh xlerobot 'systemctl --user stop woodside-supervisor && systemctl --user start xlerobot-host'
+ssh xlerobot 'journalctl --user -u xlerobot-host -f'
+ssh xlerobot 'systemctl --user stop xlerobot-host && systemctl --user start woodside-supervisor'   # hand back
 ```
 
 VM:
@@ -97,6 +115,13 @@ docker compose -f deploy/vm/docker-compose.yml exec dashboard strands-robots doc
 
 ## Gotchas
 
+- The robot is the **2-wheel** build (`xlerobot_2wheels`, keys `x.vel`/`theta.vel`, no `y.vel`).
+  Use `XLEROBOT_TYPE=xlerobot_2wheels_client`; `xlerobot_client` is the 3-omniwheel build.
+- The Pi also runs **Woodside LeLab** (`woodside-supervisor` user unit, `~/.local/share/woodside-lelab`),
+  a separate rate-limited teleop/safety stack using the same leaders, follower ports and
+  calibrations. It and `xlerobot-host` cannot run at the same time.
+- The 2-wheel host's `connect()` prompts on stdin to restore calibration (writes it to the motors);
+  the unit answers Enter.
 - `lerobot_robot_xlerobot` registers `XLerobotClientConfig` but does not export `XLerobotClient`,
   so lerobot cannot build `xlerobot_client` from it alone. `deploy/xlerobot_client/` is a tiny
   `lerobot_robot_xlerobot_client` plugin that exposes the class; the image installs it.

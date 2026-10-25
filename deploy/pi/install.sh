@@ -7,8 +7,8 @@ set -euo pipefail
 
 VENV="${VENV:-$HOME/xlerobot-runtime}"
 ROBOT_ID="${ROBOT_ID:-woodside}"   # calibration: ~/.cache/huggingface/lerobot/calibration/robots/xlerobot_2wheels/<id>.json
-PORT1="${PORT1:-/dev/serial/by-id/usb-1a86_USB_Single_Serial_5B91027960-if00}"   # ttyACM0
-PORT2="${PORT2:-/dev/serial/by-id/usb-1a86_USB_Single_Serial_5B8E114351-if00}"   # ttyACM1
+PORT1="${PORT1:-/dev/serial/by-id/usb-1a86_USB_Single_Serial_5B8E114351-if00}"   # left arm + head (ttyACM1)
+PORT2="${PORT2:-/dev/serial/by-id/usb-1a86_USB_Single_Serial_5B91027960-if00}"   # right arm + wheels (ttyACM0)
 XLEROBOT_REF="${XLEROBOT_REF:-b017b5e6354bd9f61f4247a920c72622ca0aade0}"
 XLEROBOT_DIR="${XLEROBOT_DIR:-$HOME/XLeRobot}"
 

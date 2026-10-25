@@ -185,13 +185,13 @@ done in `plan.md`, push.
 
 | Checkpoint | Status | Notes |
 |---|---|---|
-| CP0 Fork and scaffold | done locally; GitHub fork pending | Upstream cloned in place (`upstream` remote, `main` at a3323879), scaffold committed. `doctor` runs in the container (2026-10-25). Creating `Jacob-Brokloff/robots` was blocked by the session's permission policy: Jacob runs `gh repo fork strands-labs/robots --clone=false`, then `git remote add origin https://github.com/Jacob-Brokloff/robots.git && git push -u origin main`. |
-| CP1 Leader arms | partly done | Both CH343 boards answer from the container (motor ids 1-6, STS3215, read-only ping). `bi_so_leader` + `map_fn` keys match `xlerobot_client` exactly. Left vs right still unknown; calibrate as `leader_left` / `leader_right` (ids fixed by `bi_so_leader`, see CLAUDE.md), then `teleop_xlerobot.py --check-leaders`. Needs hands on the arms. |
-| CP2 Pi host | ready to run | `deploy/pi/install.sh` + `xlerobot-host.service` written. Needs Pi hostname/IP + SSH access from Jacob. |
-| CP3 Wireless teleop (POC milestone) | ready to run | `Robot("xlerobot_client", remote_ip=...)` constructs via the shim plugin; mesh starts under `.env`. Blocked on CP1 calibration + CP2. |
-| CP4 Proxmox VM | not started | `deploy/vm/docker-compose.yml` written (zenoh hub 7447, dashboard 8090 with `DASHBOARD_AUTH_TOKEN`). VM creation needs Jacob (credentials; 1Password MCP still failing). |
-| CP5 RunPod LLM | not started | `scripts/agent.py` builds with `OpenAIModel` + `robot_mesh`. Launching a pod spends money: needs Jacob's go-ahead on GPU/model. |
-| CP6 Docs / CLAUDE.md | in progress | CLAUDE.md has ports, serial by-id, calibration ids, env vars, commands. Fill in Pi/VM/RunPod addresses as they land. |
+| CP0 Fork and scaffold | **done** | Fork `Jacob-Brokloff/robots` created by Jacob; `origin` pushed. `doctor` runs in the container. |
+| CP1 Leader arms | **done** | 5B79017318 = left, 5B90040979 = right (EEPROM homing offsets match the existing calibrations). Calibrations copied to `leader_left.json` / `leader_right.json`; `teleop_xlerobot.py --check-leaders` prints both arms. |
+| CP2 Pi host | **installed, not started** | Pi `Woodside` 192.168.1.114 is the **2-wheel** XLeRobot with an existing runtime venv and calibration `woodside`. `xlerobot-host` user unit installed with the correct buses (port1 = 5B8E114351 left+head). Not started because `woodside-supervisor` (separate safety/teleop stack) holds both buses; stopping it is Jacob's call. |
+| CP3 Wireless teleop (POC milestone) | **ready, waiting on CP2 start** | Desktop side verified: `xlerobot_2wheels_client` builds, mapped leader keys match the follower exactly, holds head + base at 0. Run: stop supervisor, start `xlerobot-host`, then `teleop_xlerobot.py`. |
+| CP4 Proxmox VM | **done** | VM 102 `strands-control` (192.168.1.82). Docker, fork at `~/robots`, dashboard + Zenoh hub up on 8090/7447. VM's `robot_mesh peers` lists the desktop's `xlerobot_2wheels_client` peer. Tailscale skipped (LAN only); follow-up. |
+| CP5 RunPod LLM | **done except motion** | Pod `strands-vllm` (A40, $0.60/hr), vLLM 0.11.0 + Qwen3-32B-AWQ, reached over the VM's SSH tunnel. The agent on the VM answered "list the robots on the mesh" correctly via `robot_mesh`. A gated motion reaching the Pi waits on CP3. |
+| CP6 Docs / CLAUDE.md | **done for what has landed** | Hosts, buses, calibrations, tunnel, commands recorded. |
 
 ## Corrections found while implementing (2026-10-25)
 
@@ -203,13 +203,19 @@ done in `plan.md`, push.
   it. Fixed by `deploy/xlerobot_client/` (plugin `lerobot_robot_xlerobot_client`), not by vendoring.
 - XLeRobot client needs `pyzmq`, which neither strands-robots nor the plugin declares; the image adds it.
 - `SOLeaderConfig` has no `id`; `bi_so_leader` names arm calibrations `{id}_left` / `{id}_right`.
-- Upstream `xlerobot_host.main()` hardcodes robot id `my_xlerobot_pc`, buses `/dev/ttyACM0`/`ACM1`,
-  and exits after 3600 s; the systemd unit restarts it.
+- The robot is the 2-wheel build, not the 3-omniwheel `xlerobot`. Its plugin exports its client and
+  its host takes `--robot.id/--robot.port1/--robot.port2`; on this Pi port1 must be 5B8E114351.
+- The Pi already runs Woodside LeLab, which holds the motor buses. The XLeRobot host can only
+  run while that supervisor is stopped.
+- The RunPod vLLM sits behind an SSH tunnel from the VM, not the public proxy, so no API key needed.
+- Follow-ups: mTLS/ACL on the mesh, Tailscale, keyboard/gamepad base control, a pod-restart
+  script that refreshes the tunnel's POD_HOST/POD_PORT.
 
 ## Hand-off notes for the next session
 
 - Working directory: `/home/jacob-jbit/Documents/jacere-robotics/Strands_Fork` (git repo, `main`).
 - Image: `docker compose -f deploy/desktop/docker-compose.yml build` -> `strands-xlerobot:latest` (~7 GB, CPU torch).
-- `deploy/.env` exists locally (copied from the example, gitignored); fill in `PI_IP` etc.
-- Next physical steps for Jacob: unplug test for left/right, calibrate both leaders, give Pi SSH access.
+- `deploy/.env` exists on the desktop and the VM (gitignored); the VM's holds the dashboard token.
+- Next step: Jacob decides whether to stop `woodside-supervisor` for CP3; then run the Pi commands in CLAUDE.md.
+- The RunPod pod bills $0.60/hr while running; stop it in the console when idle.
 - Update the status table above and `CLAUDE.md` as each checkpoint lands. Keep this file as the single hand-off doc.
