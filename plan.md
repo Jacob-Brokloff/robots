@@ -208,6 +208,9 @@ done in `plan.md`, push.
 - The Pi already runs Woodside LeLab, which holds the motor buses. The XLeRobot host can only
   run while that supervisor is stopped.
 - The RunPod vLLM sits behind an SSH tunnel from the VM, not the public proxy, so no API key needed.
+- Both XLeRobot clients define `connect(self)`, but Strands calls `robot.connect(False)`; every live
+  teleop frame failed until the shim plugin accepted (and ignored) `calibrate`. The glide, which calls
+  the client directly, did move the follower over WiFi (left pan 22.8 -> 3.4).
 - Follow-ups: mTLS/ACL on the mesh, Tailscale, keyboard/gamepad base control, a pod-restart
   script that refreshes the tunnel's POD_HOST/POD_PORT.
 

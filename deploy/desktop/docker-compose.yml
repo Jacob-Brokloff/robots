@@ -18,6 +18,7 @@ services:
       - ../strands:/strands
       - ${HOME}/.cache/huggingface/lerobot:/root/.cache/huggingface/lerobot
       - ../../scripts:/opt/strands/scripts
+      - ../xlerobot_client:/opt/strands/deploy/xlerobot_client
       - /dev/serial/by-id:/dev/serial/by-id:ro
     devices:
       - /dev/ttyACM0
