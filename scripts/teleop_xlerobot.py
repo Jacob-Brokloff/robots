@@ -81,16 +81,33 @@ def check_leaders() -> None:
         leader.disconnect()
 
 
-def glide(client, follower_keys, seconds: float, hz: float) -> dict:
+def _connect_leader(leader, tries: int = 4) -> None:
+    """Connect the leaders, retrying: the right leader's 5 V supply sags and its gripper can flag undervoltage."""
+    for attempt in range(1, tries + 1):
+        try:
+            leader.connect()
+            return
+        except Exception as e:  # lerobot raises plain RuntimeError/ConnectionError for bus faults
+            print(f"leader connect attempt {attempt}/{tries} failed: {e}", flush=True)
+            try:
+                leader.disconnect()
+            except Exception:
+                pass
+            if attempt == tries:
+                raise
+            time.sleep(1.0)
+
+
+def glide(client, leader, follower_keys, seconds: float, hz: float) -> dict:
     """Move the follower smoothly from where it is to the leaders' pose, so live teleop starts without a jump.
 
     Each tick re-reads the leaders and commands a point that far along the way from the follower's start pose,
-    so the leaders can be held still or moved during the glide. Returns the follower's start observation.
+    so the leaders can be held still or moved during the glide. Leaves both devices connected so Strands'
+    teleop loop reuses them. Returns the follower's start observation.
     """
-    leader = _bimanual_leader()
     to_follower = bimanual_map_for(follower_keys)
+    _connect_leader(leader)
     client.connect()
-    leader.connect()
     try:
         start = client.get_observation()
         hold = _holds(follower_keys, start)
@@ -105,16 +122,18 @@ def glide(client, follower_keys, seconds: float, hz: float) -> dict:
             time.sleep(1 / hz)
         print("glide done; following the leaders live", flush=True)
         return start
-    finally:
+    except BaseException:
         leader.disconnect()
         client.disconnect()
+        raise
 
 
 def teleop(two_devices: bool, hz: float, mesh: bool, glide_s: float, duration: float | None) -> None:
     robot_type = os.environ.get("XLEROBOT_TYPE", DEFAULT_TYPE)
     follower = Robot(robot_type, mode="real", remote_ip=os.environ["PI_IP"], mesh=mesh)
     follower_keys = list(follower.robot.action_features)
-    current = glide(follower.robot, follower_keys, glide_s, hz) if glide_s > 0 else {}
+    leader = None if two_devices else _bimanual_leader()
+    current = glide(follower.robot, leader, follower_keys, glide_s, hz) if glide_s > 0 and leader else {}
     if two_devices:
         follower.attach_teleop(
             "so101_leader", name="left", port=os.environ["LEFT_LEADER_PORT"], id="leader_left",
@@ -125,7 +144,7 @@ def teleop(two_devices: bool, hz: float, mesh: bool, glide_s: float, duration: f
             map_fn=_prefix_map("right_arm_", hold={}),
         )
     else:
-        follower.attach_teleop(_bimanual_leader(), name="leader", map_fn=bimanual_map_for(follower_keys, current))
+        follower.attach_teleop(leader, name="leader", map_fn=bimanual_map_for(follower_keys, current))
     print(follower.teleoperate(hz=hz, block=True, duration=duration))
 
 

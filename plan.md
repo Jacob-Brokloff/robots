@@ -188,10 +188,10 @@ done in `plan.md`, push.
 | CP0 Fork and scaffold | **done** | Fork `Jacob-Brokloff/robots` created by Jacob; `origin` pushed. `doctor` runs in the container. |
 | CP1 Leader arms | **done** | 5B79017318 = left, 5B90040979 = right (EEPROM homing offsets match the existing calibrations). Calibrations copied to `leader_left.json` / `leader_right.json`; `teleop_xlerobot.py --check-leaders` prints both arms. |
 | CP2 Pi host | **done** | Pi `Woodside` 192.168.1.114, **2-wheel** XLeRobot, calibration `woodside`. 2026-10-25 16:48: after the C300 USB outputs were power-cycled (which also rebooted the Pi), both follower buses answered (port1 ids 1-8, port2 ids 1-6, 9, 10). Woodside's guarded `maintenance stop` then succeeded, and `xlerobot-host` started, restored calibration and opened ZMQ 5555/5556 (reachable from the desktop). Earlier dead left bus: the C300 port/PD negotiation had dropped 12 V; fixed by toggling the station's USB outputs. |
-| CP3 Wireless teleop (POC milestone) | **ready, waiting on Jacob's "go"** | Desktop and host verified; follower read back over WiFi (leader-vs-follower gaps up to 33 units on shoulder pan). `teleop_xlerobot.py` now glides 3 s from the follower's pose to the leaders' before following live, and holds the head where it is. |
+| CP3 Wireless teleop (POC milestone) | **done** | 2026-10-25 ~17:10, Jacob at the robot: `teleop_xlerobot.py --duration 120` from the desktop container glided 3 s to the leaders' pose, then followed live over WiFi. Strands result: 3600 frames, 0 errors, 0 slew rejections, 30.0 Hz over 120 s; Jacob confirmed the follower tracked the leaders smoothly. |
 | CP4 Proxmox VM | **done** | VM 102 `strands-control` (192.168.1.82). Docker, fork at `~/robots`, dashboard + Zenoh hub up on 8090/7447. VM's `robot_mesh peers` lists the desktop's `xlerobot_2wheels_client` peer. Tailscale skipped (LAN only); follow-up. |
-| CP5 RunPod LLM | **done except motion** | Pod `strands-vllm` (A40, $0.60/hr), vLLM 0.11.0 + Qwen3-32B-AWQ, reached over the VM's SSH tunnel. The agent on the VM answered "list the robots on the mesh" correctly via `robot_mesh`. A gated motion reaching the Pi waits on CP3. |
-| CP6 Docs / CLAUDE.md | **done for what has landed** | Hosts, buses, calibrations, tunnel, commands recorded. |
+| CP5 RunPod LLM | **done** | Pod `strands-vllm` (A40, $0.60/hr), vLLM 0.11.0 + Qwen3-32B-AWQ over the VM's SSH tunnel. The VM agent answered "list the robots on the mesh" correctly, and on request sent a gated `robot_mesh stop` that reached the desktop XLeRobot peer (`STOP RECEIVED via mesh`, answered "No task running to stop (current: idle)"). Real motion from an agent needs `execute`/`start` with a policy server (out of scope per plan); `set_joints` is sim-only and the mock policy is unsafe on hardware. Headless run pre-approved only `stop` via `STRANDS_MESH_HITL_ACTIONS=broadcast,emergency_stop,rpc,send,tell`. |
+| CP6 Docs / CLAUDE.md | **done** | CLAUDE.md has hosts, buses, calibrations, tunnel, commands and gotchas; this table is current. |
 
 ## Corrections found while implementing (2026-10-25)
 
@@ -211,7 +211,8 @@ done in `plan.md`, push.
 - Both XLeRobot clients define `connect(self)`, but Strands calls `robot.connect(False)`; every live
   teleop frame failed until the shim plugin accepted (and ignored) `calibrate`. The glide, which calls
   the client directly, did move the follower over WiFi (left pan 22.8 -> 3.4).
-- Follow-ups: mTLS/ACL on the mesh, Tailscale, keyboard/gamepad base control, a pod-restart
+- Right leader's 5 V supply still sags (gripper id 6 flags undervoltage on connect); the script retries the connect. A better 5 V/3 A adapter is the real fix.
+- Follow-ups: a policy server for agent-driven motion, mTLS/ACL on the mesh, Tailscale, keyboard/gamepad base control, a pod-restart
   script that refreshes the tunnel's POD_HOST/POD_PORT.
 
 ## Hand-off notes for the next session
@@ -219,6 +220,7 @@ done in `plan.md`, push.
 - Working directory: `/home/jacob-jbit/Documents/jacere-robotics/Strands_Fork` (git repo, `main`).
 - Image: `docker compose -f deploy/desktop/docker-compose.yml build` -> `strands-xlerobot:latest` (~7 GB, CPU torch).
 - `deploy/.env` exists on the desktop and the VM (gitignored); the VM's holds the dashboard token.
-- Next step: Jacob decides whether to stop `woodside-supervisor` for CP3; then run the Pi commands in CLAUDE.md.
+- POC complete. On the Pi `xlerobot-host` is running (holds both buses, arm torque on) and `woodside-supervisor` is stopped; hand back with the command in CLAUDE.md.
+- C300 gotcha: if a bus goes silent, toggle the station's USB outputs (this also reboots the Pi) and re-run Woodside's guarded `maintenance stop` before starting the host.
 - The RunPod pod bills $0.60/hr while running; stop it in the console when idle.
 - Update the status table above and `CLAUDE.md` as each checkpoint lands. Keep this file as the single hand-off doc.

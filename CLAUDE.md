@@ -93,7 +93,8 @@ docker compose -f deploy/desktop/docker-compose.yml run --rm robot-client lerobo
 docker compose -f deploy/desktop/docker-compose.yml run --rm robot-client python scripts/teleop_xlerobot.py --check-leaders
 # CP3: plain lerobot, then Strands
 docker compose -f deploy/desktop/docker-compose.yml run --rm robot-client lerobot-teleoperate --robot.type=xlerobot_client --robot.remote_ip=$PI_IP --teleop.type=bi_so_leader --teleop.left_arm_config.port=$LEFT_LEADER_PORT --teleop.right_arm_config.port=$RIGHT_LEADER_PORT --teleop.id=leader
-docker compose -f deploy/desktop/docker-compose.yml run --rm robot-client python scripts/teleop_xlerobot.py
+docker compose -f deploy/desktop/docker-compose.yml run --rm -e BYPASS_TOOL_CONSENT=true robot-client python scripts/teleop_xlerobot.py --duration 120
+# glides 3 s from the robot's pose to the leaders', then follows live; --glide 0 to skip
 ```
 
 Pi (the host needs both motor buses, which `woodside-supervisor` holds while it runs):
@@ -129,4 +130,11 @@ docker compose -f deploy/vm/docker-compose.yml exec dashboard strands-robots doc
 - The container runs as root, so `doctor`'s "not in dialout group" FAIL does not apply; its MuJoCo
   FAILs are the sim stack, which the POC does not install.
 - Mesh is off unless `mesh=True`; `teleop_xlerobot.py` turns it on (`--no-mesh` to skip).
+- If a follower bus goes silent (no motors answer, USB adapter still present), the C300's USB-C port
+  dropped 12 V. Toggle the station's USB outputs (this reboots the Pi too), then rerun Woodside's
+  guarded stop and start the host.
+- The right leader's 5 V supply sags; its gripper (id 6) can flag "Input voltage error" on connect.
+  `teleop_xlerobot.py` retries the leader connect.
+- Agent-driven motion on real hardware goes through mesh `execute`/`start`, which needs a policy
+  server; `set_joints` is sim-only. The agent can `stop` a robot today.
 - The image installs CPU torch (`UV_TORCH_BACKEND=cpu`); the desktop GPU is AMD and no policy runs here.
