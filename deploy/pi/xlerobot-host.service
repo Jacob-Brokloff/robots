@@ -1,17 +1,18 @@
+# systemd *user* unit (linger is on for woodside, so it runs without a login).
+# Installed by install.sh to ~/.config/systemd/user/. It needs the motor buses to itself:
+# stop woodside-supervisor first (it holds both ports), see CLAUDE.md.
 [Unit]
-Description=XLeRobot lerobot host (ZMQ cmd 5555, observations 5556)
+Description=XLeRobot 2-wheel lerobot host (ZMQ cmd 5555, observations 5556)
 After=network-online.target
-Wants=network-online.target
 
 [Service]
-User=@USER@
-WorkingDirectory=@HOME@
+Type=simple
 Environment=PYTHONUNBUFFERED=1
-# Host main() hardcodes robot id "my_xlerobot_pc", bus ports /dev/ttyACM0 + /dev/ttyACM1,
-# and exits after connection_time_s (3600 s); Restart=always brings it back.
-ExecStart=@VENV@/bin/python -m lerobot_robot_xlerobot.xlerobot_host
+ExecStart=@VENV@/bin/python -m lerobot_robot_xlerobot_2wheels.xlerobot_2wheels_host \
+    --robot.id=@ROBOT_ID@ --robot.port1=@PORT1@ --robot.port2=@PORT2@
+# The host exits after connection_time_s (3600 s); bring it back.
 Restart=always
 RestartSec=3
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

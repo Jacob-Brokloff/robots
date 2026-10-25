@@ -1,5 +1,15 @@
 {
   "robots": {
+    "xlerobot_2wheels_client": {
+      "description": "XLeRobot 2-wheel networked client (drives xlerobot_2wheels_host on the Pi over ZMQ 5555/5556)",
+      "category": "mobile_manip",
+      "hardware": {
+        "lerobot_type": "xlerobot_2wheels_client"
+      },
+      "aliases": [
+        "xlerobot_2wheels_remote"
+      ]
+    },
     "xlerobot_client": {
       "description": "XLeRobot networked client (drives a remote xlerobot_host on the Pi over ZMQ 5555/5556)",
       "category": "mobile_manip",

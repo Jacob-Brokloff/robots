@@ -25,13 +25,14 @@ ENV SETUPTOOLS_SCM_PRETEND_VERSION=${STRANDS_VERSION}
 # The fork itself, with the extras the POC needs. CPU torch: nothing here runs a policy.
 RUN uv pip install -e ".[lerobot,mesh,dashboard,serial]" "strands-agents[openai]" pyzmq
 
-# XLeRobot lerobot plugin (xlerobot / xlerobot_client robot types), pinned.
+# XLeRobot lerobot plugins, pinned: xlerobot_2wheels (the robot we have) and the 3-omniwheel xlerobot.
 ARG XLEROBOT_REF=b017b5e6354bd9f61f4247a920c72622ca0aade0
 RUN git clone https://github.com/Vector-Wangel/XLeRobot.git /opt/XLeRobot \
     && git -C /opt/XLeRobot checkout "$XLEROBOT_REF" \
     && uv pip install --no-deps \
         /opt/XLeRobot/software/plugins/xlerobot_model \
         /opt/XLeRobot/software/plugins/lerobot_robot_xlerobot \
+        /opt/XLeRobot/software/plugins/lerobot_robot_xlerobot_2wheels \
     && uv pip install -e /opt/strands/deploy/xlerobot_client
 
 CMD ["strands-robots", "doctor"]
