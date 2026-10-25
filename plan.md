@@ -190,7 +190,7 @@ done in `plan.md`, push.
 | CP2 Pi host | **done** | Pi `Woodside` 192.168.1.114, **2-wheel** XLeRobot, calibration `woodside`. 2026-10-25 16:48: after the C300 USB outputs were power-cycled (which also rebooted the Pi), both follower buses answered (port1 ids 1-8, port2 ids 1-6, 9, 10). Woodside's guarded `maintenance stop` then succeeded, and `xlerobot-host` started, restored calibration and opened ZMQ 5555/5556 (reachable from the desktop). Earlier dead left bus: the C300 port/PD negotiation had dropped 12 V; fixed by toggling the station's USB outputs. |
 | CP3 Wireless teleop (POC milestone) | **done** | 2026-10-25 ~17:10, Jacob at the robot: `teleop_xlerobot.py --duration 120` from the desktop container glided 3 s to the leaders' pose, then followed live over WiFi. Strands result: 3600 frames, 0 errors, 0 slew rejections, 30.0 Hz over 120 s; Jacob confirmed the follower tracked the leaders smoothly. |
 | CP4 Proxmox VM | **done** | VM 102 `strands-control` (192.168.1.82). Docker, fork at `~/robots`, dashboard + Zenoh hub up on 8090/7447. VM's `robot_mesh peers` lists the desktop's `xlerobot_2wheels_client` peer. Tailscale skipped (LAN only); follow-up. |
-| CP5 RunPod LLM | **done** | Pod `strands-vllm` (A40, $0.60/hr), vLLM 0.11.0 + Qwen3-32B-AWQ over the VM's SSH tunnel. The VM agent answered "list the robots on the mesh" correctly, and on request sent a gated `robot_mesh stop` that reached the desktop XLeRobot peer (`STOP RECEIVED via mesh`, answered "No task running to stop (current: idle)"). Real motion from an agent needs `execute`/`start` with a policy server (out of scope per plan); `set_joints` is sim-only and the mock policy is unsafe on hardware. Headless run pre-approved only `stop` via `STRANDS_MESH_HITL_ACTIONS=broadcast,emergency_stop,rpc,send,tell`. |
+| CP5 RunPod LLM | **done, motion blocked by design** | Pod `strands-vllm` (A40) served Qwen3-32B-AWQ via the VM tunnel; the VM agent answered robot questions and sent gated mesh commands. Agent `stop` reached the robot peer. An agent `execute` with the bounded `nudge` policy passed the operator gate (Jacob typed y at `Approve? [y/N]`) but the robot refused it: "the sample carried no publisher session id". Strands only accepts remote motion from an attributed sender, which needs mesh mTLS. Nothing moved. **Pod stopped 2026-10-25 ~17:30 ($0.00/hr; its vLLM install is gone).** |
 | CP6 Docs / CLAUDE.md | **done** | CLAUDE.md has hosts, buses, calibrations, tunnel, commands and gotchas; this table is current. |
 
 ## Corrections found while implementing (2026-10-25)
@@ -215,12 +215,38 @@ done in `plan.md`, push.
 - Follow-ups: a policy server for agent-driven motion, mTLS/ACL on the mesh, Tailscale, keyboard/gamepad base control, a pod-restart
   script that refreshes the tunnel's POD_HOST/POD_PORT.
 
+## State at hand-off (2026-10-25 ~17:30)
+
+| Thing | State | Turn it back on |
+|---|---|---|
+| RunPod pod `strands-vllm` | **stopped**, $0.00/hr, no volume (vLLM + model cache wiped) | Start it in the RunPod console, then on the pod: `uv venv` + `uv pip install vllm==0.11.0 transformers==4.57.1` in `/workspace/vllm-venv` and run `/workspace/serve.sh` (CLAUDE.md). Update `POD_HOST`/`POD_PORT` for the VM tunnel. |
+| VM `runpod-vllm-tunnel` | **disabled** | `sudo systemctl enable --now runpod-vllm-tunnel` on the VM once the pod is up |
+| VM dashboard + Zenoh hub (102, 192.168.1.82) | running, idle | already up (`restart: unless-stopped`) |
+| Desktop dashboard | **running** at http://localhost:8090, passkey enrolled by Jacob | `docker compose -f deploy/desktop/docker-compose.yml up -d dashboard` |
+| Pi `xlerobot-host` | **stopped** | `ssh xlerobot 'systemctl --user stop woodside-supervisor && systemctl --user start xlerobot-host'` |
+| Pi `woodside-supervisor` | **running, RECOVERY_REQUIRED**: the host left the follower torque on; Woodside will not cut it on its own | Jacob supports the arms and clears recovery from the Woodside desktop app |
+
+## Next work (agreed direction)
+
+1. **Dashboard teleop button for the XLeRobot.** Strands already has mesh teleop in the dashboard
+   (`strands_robots/dashboard/routes_mesh.py`: `/robots/{peer}/teleop/publish|receive|stop`) and a device
+   manager that spawns peers (`device_manager.py`, Devices panel). Missing: device profiles for
+   `xlerobot_2wheels_client` (follower) and `bi_so_leader` (leaders) so both can be spawned from the
+   Devices panel, then a one-click "teleop" that starts publish on the leader peer and receive on the
+   robot peer. The glide-in from `scripts/teleop_xlerobot.py` should carry over.
+2. **Robot cameras in the dashboard.** The XLeRobot's cameras are on the Pi; configure them in the host
+   (`XLerobot2WheelsConfig.cameras`) so observations carry frames, then surface them per robot. The
+   desktop dashboard container also needs `/dev/video*` for local USB cameras.
+3. **Mesh mTLS** (`STRANDS_MESH_AUTH_MODE=mtls` + certs) so agent `execute` is attributable and allowed;
+   then rerun the `nudge` check (`scripts/robot_peer.py`, `~/cp5_nudge.sh` on the VM).
+4. Right leader 5 V/3 A adapter; Tailscale; a policy server for real agent tasks.
+
 ## Hand-off notes for the next session
 
 - Working directory: `/home/jacob-jbit/Documents/jacere-robotics/Strands_Fork` (git repo, `main`).
 - Image: `docker compose -f deploy/desktop/docker-compose.yml build` -> `strands-xlerobot:latest` (~7 GB, CPU torch).
 - `deploy/.env` exists on the desktop and the VM (gitignored); the VM's holds the dashboard token.
-- POC complete. On the Pi `xlerobot-host` is running (holds both buses, arm torque on) and `woodside-supervisor` is stopped; hand back with the command in CLAUDE.md.
+- POC complete; see "State at hand-off" above for what is running.
 - C300 gotcha: if a bus goes silent, toggle the station's USB outputs (this also reboots the Pi) and re-run Woodside's guarded `maintenance stop` before starting the host.
 - The RunPod pod bills $0.60/hr while running; stop it in the console when idle.
 - Update the status table above and `CLAUDE.md` as each checkpoint lands. Keep this file as the single hand-off doc.

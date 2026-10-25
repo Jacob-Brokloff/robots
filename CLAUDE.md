@@ -30,7 +30,8 @@ systemd service (`ssh -L 127.0.0.1:8000:127.0.0.1:8000`); after a pod restart, u
 | 5555 | ZMQ PULL, commands to the robot | Pi (`xlerobot_host`) |
 | 5556 | ZMQ PUSH, observations from the robot | Pi |
 | 7447 | Zenoh mesh | VM listens (`ZENOH_LISTEN=tcp/0.0.0.0:7447`), desktop dials it |
-| 8090 | Strands dashboard (`strands-robots dashboard`, `DASHBOARD_AUTH_TOKEN` in VM `deploy/.env`) | VM |
+| 8090 | Strands dashboard (`strands-robots dashboard`, `DASHBOARD_AUTH_TOKEN` in VM `deploy/.env`) | VM (LAN) |
+| 8090 | Strands dashboard, loopback only, passkey login: **http://localhost:8090** | desktop (`deploy/desktop` service `dashboard`) |
 | 8000 | vLLM OpenAI API, via SSH tunnel | VM `127.0.0.1` only |
 
 ## Serial devices (desktop)
@@ -97,6 +98,20 @@ docker compose -f deploy/desktop/docker-compose.yml run --rm -e BYPASS_TOOL_CONS
 # glides 3 s from the robot's pose to the leaders', then follows live; --glide 0 to skip
 ```
 
+Desktop dashboard (always on; passkey store persisted in `deploy/strands/dashboard-auth/`):
+
+```bash
+docker compose -f deploy/desktop/docker-compose.yml up -d dashboard   # open http://localhost:8090 (not 127.0.0.1)
+```
+
+A new passkey needs the one-time bootstrap file; with no passkey enrolled the server mints it at
+`/root/.strands_dashboard/enroll_token` inside the container. Copy it without printing:
+`docker compose -f deploy/desktop/docker-compose.yml exec -T dashboard cat /root/.strands_dashboard/enroll_token | tr -d '\n' | wl-copy`.
+
+Agent motion check (needs mesh mTLS before the robot will accept it): `scripts/robot_peer.py` on the desktop
+with `STRANDS_ROBOT_COMMAND_ALLOW=execute STRANDS_MESH_POLICY_TYPE_ALLOW=nudge`, then `~/cp5_nudge.sh` on the VM
+(also needs `STRANDS_MESH_POLICY_TYPE_ALLOW=nudge`). `scripts/agent.py` prompts `Approve? [y/N]` for gated actions.
+
 Pi (the host needs both motor buses, which `woodside-supervisor` holds while it runs):
 
 ```bash
@@ -135,6 +150,8 @@ docker compose -f deploy/vm/docker-compose.yml exec dashboard strands-robots doc
   guarded stop and start the host.
 - The right leader's 5 V supply sags; its gripper (id 6) can flag "Input voltage error" on connect.
   `teleop_xlerobot.py` retries the leader connect.
-- Agent-driven motion on real hardware goes through mesh `execute`/`start`, which needs a policy
-  server; `set_joints` is sim-only. The agent can `stop` a robot today.
+- Agent-driven motion on real hardware goes through mesh `execute`/`start`. The robot refuses it unless
+  the sender is attributable ("no publisher session id" under auth `none`), so it needs mesh mTLS, plus a
+  policy (`scripts/nudge_policy.py` is a bounded one). `set_joints` is sim-only. `stop` works today.
+- Stopping `xlerobot-host` leaves the follower torque ON; Woodside then reports RECOVERY_REQUIRED.
 - The image installs CPU torch (`UV_TORCH_BACKEND=cpu`); the desktop GPU is AMD and no policy runs here.

@@ -2,27 +2,49 @@
 #   docker compose -f deploy/desktop/docker-compose.yml build
 #   docker compose -f deploy/desktop/docker-compose.yml run --rm robot-client strands-robots doctor
 #   docker compose -f deploy/desktop/docker-compose.yml run --rm robot-client python scripts/teleop_xlerobot.py
+#   docker compose -f deploy/desktop/docker-compose.yml up -d dashboard   # http://localhost:8090 (passkey login)
+x-robot: &robot
+  image: strands-xlerobot:latest
+  build:
+    context: ../..
+    dockerfile: deploy/Dockerfile
+  network_mode: host
+  env_file:
+    - path: ../.env
+      required: false
+  volumes:
+    - ../strands:/strands
+    - ${HOME}/.cache/huggingface/lerobot:/root/.cache/huggingface/lerobot
+    - ../../scripts:/opt/strands/scripts
+    - ../xlerobot_client:/opt/strands/deploy/xlerobot_client
+    - /dev/serial/by-id:/dev/serial/by-id:ro
+  devices:
+    - /dev/ttyACM0
+    - /dev/ttyACM1
+
 services:
-  robot-client:
-    image: strands-xlerobot:latest
-    build:
-      context: ../..
-      dockerfile: deploy/Dockerfile
-    network_mode: host
-    env_file:
-      - path: ../.env
-        required: false
+  # Operator dashboard on the machine with the leader arms, so its device manager can see them.
+  # Loopback only: passkeys need http://localhost. No static token, so first enrolment uses the
+  # one-time bootstrap file the server writes under deploy/strands/.
+  dashboard:
+    <<: *robot
+    restart: unless-stopped
     environment:
       STRANDS_BASE_DIR: /strands
+      DASHBOARD_AUTH_TOKEN: ""
     volumes:
       - ../strands:/strands
+      - ../strands/dashboard-auth:/root/.strands_dashboard
       - ${HOME}/.cache/huggingface/lerobot:/root/.cache/huggingface/lerobot
       - ../../scripts:/opt/strands/scripts
       - ../xlerobot_client:/opt/strands/deploy/xlerobot_client
       - /dev/serial/by-id:/dev/serial/by-id:ro
-    devices:
-      - /dev/ttyACM0
-      - /dev/ttyACM1
+    command: ["strands-robots", "dashboard", "--host", "127.0.0.1", "--port", "8090"]
+
+  robot-client:
+    <<: *robot
+    environment:
+      STRANDS_BASE_DIR: /strands
     stdin_open: true
     tty: true
     command: ["strands-robots", "doctor"]
