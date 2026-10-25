@@ -1,0 +1,14 @@
+{
+  "robots": {
+    "xlerobot_client": {
+      "description": "XLeRobot networked client (drives a remote xlerobot_host on the Pi over ZMQ 5555/5556)",
+      "category": "mobile_manip",
+      "hardware": {
+        "lerobot_type": "xlerobot_client"
+      },
+      "aliases": [
+        "xlerobot_remote"
+      ]
+    }
+  }
+}

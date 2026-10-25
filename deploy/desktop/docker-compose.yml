@@ -1,0 +1,27 @@
+# Desktop: leader arms + Strands robot-client that drives the XLeRobot Pi over WiFi.
+#   docker compose -f deploy/desktop/docker-compose.yml build
+#   docker compose -f deploy/desktop/docker-compose.yml run --rm robot-client strands-robots doctor
+#   docker compose -f deploy/desktop/docker-compose.yml run --rm robot-client python scripts/teleop_xlerobot.py
+services:
+  robot-client:
+    image: strands-xlerobot:latest
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile
+    network_mode: host
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      STRANDS_BASE_DIR: /strands
+    volumes:
+      - ../strands:/strands
+      - ${HOME}/.cache/huggingface/lerobot:/root/.cache/huggingface/lerobot
+      - ../../scripts:/opt/strands/scripts
+      - /dev/serial/by-id:/dev/serial/by-id:ro
+    devices:
+      - /dev/ttyACM0
+      - /dev/ttyACM1
+    stdin_open: true
+    tty: true
+    command: ["strands-robots", "doctor"]

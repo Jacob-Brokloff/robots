@@ -1,0 +1,8 @@
+.git
+.venv
+**/__pycache__
+docs
+tests
+tests_integ
+deploy/.env
+deploy/strands

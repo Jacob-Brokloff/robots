@@ -22,3 +22,7 @@ site/
 
 # tool caches (playwright renders, scratch)
 .cache/
+
+# Jacere fork: runtime state under the mounted STRANDS_BASE_DIR
+deploy/strands/*
+!deploy/strands/user_robots.json

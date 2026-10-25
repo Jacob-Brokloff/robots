@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lerobot_robot_xlerobot_client"
+version = "0.1.0"
+description = "Exposes XLeRobot's XLerobotClient where lerobot's device-class lookup finds it"
+requires-python = ">=3.10"
+
+[tool.setuptools]
+packages = ["lerobot_robot_xlerobot_client"]

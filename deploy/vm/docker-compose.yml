@@ -1,0 +1,35 @@
+# Proxmox VM "strands-control": Zenoh hub, operator dashboard, Strands agent.
+#   docker compose -f deploy/vm/docker-compose.yml up -d dashboard
+#   docker compose -f deploy/vm/docker-compose.yml run --rm agent
+x-strands: &strands
+  image: strands-xlerobot:latest
+  build:
+    context: ../..
+    dockerfile: deploy/Dockerfile
+  network_mode: host
+  env_file:
+    - path: ../.env
+      required: false
+  volumes:
+    - ../strands:/strands
+    - ../../scripts:/opt/strands/scripts
+
+services:
+  dashboard:
+    <<: *strands
+    restart: unless-stopped
+    environment:
+      STRANDS_BASE_DIR: /strands
+      ZENOH_LISTEN: tcp/0.0.0.0:7447
+      ZENOH_CONNECT: ""
+    command: ["strands-robots", "dashboard", "--host", "0.0.0.0", "--port", "8090"]
+
+  agent:
+    <<: *strands
+    profiles: ["agent"]
+    stdin_open: true
+    tty: true
+    environment:
+      STRANDS_BASE_DIR: /strands
+      ZENOH_CONNECT: tcp/127.0.0.1:7447
+    command: ["python", "scripts/agent.py"]
