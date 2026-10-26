@@ -414,6 +414,43 @@ one-liners; mark the vLLM/Qwen rows retired; this status table.
 - Pod bills $0.60/hr running; a network volume is ~$0.07/GB/month. Stop the pod when idle.
 - `xlerobot-host` still conflicts with Woodside. No `BYPASS_TOOL_CONSENT` is needed on this path.
 
+### Running phase 2 (one prompt, one block per session)
+
+Jacob runs phase 2 as a sequence of fresh sessions. Every session gets the same prompt:
+
+```
+Read CLAUDE.md and plan.md, then run the next phase 2 block as "Running phase 2" in plan.md says.
+```
+
+The agent then does exactly this:
+
+1. Read the phase 2 status table. The **next block** is the lowest-numbered block in the table
+   below whose checkpoints are not all `done`. If every block is done, say so and stop.
+2. Do that block's checkpoints in order, verifying each done-when before starting the next one.
+   Obey the block's gate line at all times. Never start a checkpoint from a later block.
+3. If a done-when cannot be met, write why in the status table (`blocked: <reason>`) and stop
+   the block there; do not skip ahead.
+4. Finish by updating the status table and CLAUDE.md for what landed, committing on `main`
+   with one commit per checkpoint (`CP<n>: <what landed>`), and reporting: what passed, what did
+   not, and what Jacob must do by hand before the next block. Then stop. Do not ask whether to
+   continue into the next block.
+
+After the report, Jacob reads the status table diff, does any by-hand item, adds a line to the
+table or the hand-off section for anything he changed himself, closes the session, and opens a
+fresh one with the same prompt.
+
+| Block | Checkpoints | Gate line |
+|---|---|---|
+| 1 | CP8, CP9, CP10, plus the **files only** for CP11 (`deploy/pi/control/`, `scripts/pi_control.py`, `scripts/serve_nudge.py`) and CP13 (`deploy/runpod/`, `scripts/serve_policy.py`, `scripts/train_pi05.py`) | Do not touch the robot, the Pi's services, Tailscale or the pod. Mark CP11 and CP13 `files written` in the table, not `done`. |
+| 2 | CP7 | Jacob approves each Tailscale login URL you print; wait for him at each host. Never run `tailscale up` with a pre-auth key you invented. |
+| 3 | CP11 (run) | Jacob is at the robot with the e-stop. Before any command that moves the arm, say what it will do and wait for his yes. Stop `woodside-supervisor` and start `xlerobot-host` only after he confirms the arms are supported. |
+| 4 | CP12 | Jacob drives the leaders. Confirm the task text, episode count and head angle with him first; announce each episode start and stop. |
+| 5 | CP13 (run) | Give the pod cost estimate (hours x $/hr) and get a yes before training. Stop the pod when the block ends, even on failure. |
+| 6 | CP14, CP15 | Same gate as block 3, plus: confirm the pod is up and serving before the Pi loop is started. Stop the pod when the block ends. |
+
+Blocks 2 to 6 need Jacob present; block 1 does not. Block 2 may run before block 1 if Jacob is at
+the machines first; nothing in block 1 depends on it.
+
 ### Parked from phase 1
 
 Dashboard teleop button and device profiles for `xlerobot_2wheels_client` / `bi_so_leader`
