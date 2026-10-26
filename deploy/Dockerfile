@@ -6,6 +6,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.11 /uv /uvx /usr/local/bin/
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git libgl1 libglib2.0-0 ffmpeg netcat-openbsd \
+        libegl1 libgl1-mesa-dri libegl-mesa0 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV UV_SYSTEM_PYTHON=1 \
@@ -23,7 +24,8 @@ ARG STRANDS_VERSION=0.0.0+jacere
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=${STRANDS_VERSION}
 
 # The fork itself, with the extras the POC needs. CPU torch: nothing here runs a policy.
-RUN uv pip install -e ".[lerobot,mesh,dashboard,serial]" "strands-agents[openai]" pyzmq
+# sim-mujoco: MuJoCo sim rendered headless through EGL (mesa, /dev/dri passed in by compose).
+RUN uv pip install -e ".[lerobot,mesh,dashboard,serial,sim-mujoco]" "strands-agents[openai]" pyzmq
 
 # XLeRobot lerobot plugins, pinned: xlerobot_2wheels (the robot we have) and the 3-omniwheel xlerobot.
 ARG XLEROBOT_REF=b017b5e6354bd9f61f4247a920c72622ca0aade0

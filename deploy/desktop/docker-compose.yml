@@ -3,6 +3,12 @@
 #   docker compose -f deploy/desktop/docker-compose.yml run --rm robot-client strands-robots doctor
 #   docker compose -f deploy/desktop/docker-compose.yml run --rm robot-client python scripts/teleop_xlerobot.py
 #   docker compose -f deploy/desktop/docker-compose.yml up -d dashboard   # http://localhost:8090 (passkey login)
+#   docker compose -f deploy/desktop/docker-compose.yml run --rm sim python examples/01_sim_hello_world.py
+# MuJoCo renders headless through EGL on the host GPU (mesa). The containers run as root, which
+# opens /dev/dri without the host's video/render groups, so no group_add.
+x-gpu: &gpu
+  MUJOCO_GL: egl
+
 x-robot: &robot
   image: strands-xlerobot:latest
   build:
@@ -29,7 +35,12 @@ services:
   dashboard:
     <<: *robot
     restart: unless-stopped
+    devices:
+      - /dev/ttyACM0
+      - /dev/ttyACM1
+      - /dev/dri
     environment:
+      <<: *gpu
       STRANDS_BASE_DIR: /strands
       DASHBOARD_AUTH_TOKEN: ""
     volumes:
@@ -44,6 +55,23 @@ services:
   robot-client:
     <<: *robot
     environment:
+      STRANDS_BASE_DIR: /strands
+    stdin_open: true
+    tty: true
+    command: ["strands-robots", "doctor"]
+
+  # Sim only: examples, doctor, MuJoCo scripts. Same image, GPU but no serial devices.
+  sim:
+    <<: *robot
+    devices:
+      - /dev/dri
+    volumes:
+      - ../strands:/strands
+      - ../../scripts:/opt/strands/scripts
+      - ../../examples:/opt/strands/examples
+      - ../sim:/opt/strands/deploy/sim
+    environment:
+      <<: *gpu
       STRANDS_BASE_DIR: /strands
     stdin_open: true
     tty: true
