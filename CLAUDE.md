@@ -15,12 +15,20 @@ branch `main`.
 | XLeRobot Pi `Woodside` | 192.168.1.114 (WiFi), `ssh xlerobot` (user `woodside`, key in `~/.ssh/config`) | `xlerobot-host` systemd *user* unit (`deploy/pi/`); Debian 13, Python 3.13 |
 | Proxmox host `pve` | https://192.168.1.78:8006 | VMs 100 claude-agent, 101 codex-agent, **102 strands-control** |
 | VM `strands-control` (102) | 192.168.1.82 (DHCP), `ssh jbit@192.168.1.82` (desktop key) | Zenoh hub, dashboard, agent (`deploy/vm/`), clone at `~/robots`; Debian 13, 4 vCPU / 8 GB / 40 GB on truenas-nfs |
-| RunPod pod `strands-vllm` | id `vo7awa4r5uk3x1`, SSH `root@69.30.85.107 -p 22159` (VM key only) | 1x A40, $0.60/hr; vLLM 0.11.0 serving `Qwen/Qwen3-32B-AWQ` on pod `127.0.0.1:8000` |
+| RunPod pod `strands-vllm-migration` | id `2696djui2bkomf`, SSH `root@69.30.85.29 -p 22140` (VM key only; changes on restart) | 1x A40, $0.60/hr, **no network volume** (stop wipes it). Old pod `strands-vllm` (`vo7awa4r5uk3x1`) stopped, its GPU host gone |
 
-The pod's vLLM is not exposed publicly. The VM reaches it through the `runpod-vllm-tunnel`
-systemd service (`ssh -L 127.0.0.1:8000:127.0.0.1:8000`); after a pod restart, update
-`POD_HOST`/`POD_PORT` in `/etc/default/runpod-vllm-tunnel` on the VM. On the pod:
-`/workspace/serve.sh` (log `/workspace/vllm.log`; transformers pinned to 4.57.1 for vLLM 0.11).
+## Tailnet (CP7, tailnet `jacob-brokloff.github`, MagicDNS `*.tail22e67e.ts.net`)
+
+| Name | Tailnet IP | Host | Notes |
+|---|---|---|---|
+| `arch-desktop` | 100.92.165.27 | desktop | operator `jacob-jbit`, so `tailscale` needs no sudo |
+| `strands-control` | 100.70.150.7 | VM | apt `tailscale`, `tailscaled` enabled |
+| `woodside` | 100.89.113.110 | Pi | apt `tailscale`, `tailscaled` enabled |
+| `strands-pod` | 100.72.227.119 | pod | userspace `tailscaled` from `/workspace/tailscale` (`deploy/runpod/bootstrap.sh`), `--ssh`; lost on pod stop, so re-run bootstrap and approve a new login |
+
+The Qwen/vLLM path is retired: `runpod-vllm-tunnel` on the VM is disabled (unit file kept) and the new pod
+has no vLLM. Pod tailscale CLI: `/workspace/tailscale/tailscale --socket=/workspace/tailscale/tailscaled.sock`.
+Run its `up` in the background (`nohup ... &`): a `timeout`-killed `up` cancels the login URL.
 **Stop the pod in the RunPod console when not in use.**
 
 ## Ports
@@ -29,10 +37,10 @@ systemd service (`ssh -L 127.0.0.1:8000:127.0.0.1:8000`); after a pod restart, u
 |---|---|---|
 | 5555 | ZMQ PULL, commands to the robot | Pi (`xlerobot_host`) |
 | 5556 | ZMQ PUSH, observations from the robot | Pi |
-| 7447 | Zenoh mesh | VM listens (`ZENOH_LISTEN=tcp/0.0.0.0:7447`), desktop dials it |
+| 7447 | Zenoh mesh | VM listens (`ZENOH_LISTEN=tcp/0.0.0.0:7447`), desktop and Pi dial `tcp/100.70.150.7:7447` (tailnet) |
 | 8090 | Strands dashboard (`strands-robots dashboard`, `DASHBOARD_AUTH_TOKEN` in VM `deploy/.env`) | VM (LAN) |
 | 8090 | Strands dashboard, loopback only, passkey login: **http://localhost:8090** | desktop (`deploy/desktop` service `dashboard`) |
-| 8000 | vLLM OpenAI API, via SSH tunnel | VM `127.0.0.1` only |
+| 8000 | vLLM OpenAI API, via SSH tunnel (**retired** in CP7) | VM `127.0.0.1` only |
 | 8765 | PolicyServer (WebSocket, no TLS; phase 2, not running yet) | VM (`serve_nudge.py`) / pod `127.0.0.1` behind userspace Tailscale (`serve_policy.sh`) |
 
 ## Serial devices (desktop)
@@ -75,11 +83,11 @@ copies of the existing `woodside-leader-5B79017318.json` / `JBit Arm.json` (orig
   which registers `xlerobot_client`).
 - `STRANDS_MESH_LOCAL_DEV=true` - mesh auth `none`. Once any `ZENOH_CONNECT`/`ZENOH_LISTEN` is
   non-loopback Strands also requires `STRANDS_MESH_I_KNOW_THIS_IS_INSECURE=1`.
-- `ZENOH_CONNECT=tcp/<vm-ip>:7447` on the desktop after CP4 (empty = mesh stays local).
+- `ZENOH_CONNECT=tcp/100.70.150.7:7447` on the desktop (VM tailnet IP since CP7; empty = mesh stays local).
 - `BYPASS_TOOL_CONSENT=true` skips every operator consent gate (logged as WARNING). POC only.
   Narrower: `STRANDS_MESH_HITL_ACTIONS=<actions that still ask>` for the mesh tool.
 - `DASHBOARD_AUTH_TOKEN` - required for the dashboard to bind a non-loopback address.
-- `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `MODEL_ID` - RunPod vLLM for `scripts/agent.py`.
+- `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `MODEL_ID` - RunPod vLLM for `scripts/agent.py` (retired; no vLLM on the pod).
 
 ## Commands
 
