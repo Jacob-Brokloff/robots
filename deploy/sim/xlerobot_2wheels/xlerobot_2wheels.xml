@@ -195,6 +195,7 @@
           <joint name="head_tilt_joint" pos="0 0 0" axis="0 1 0" range="-0.76 1.45" actuatorfrcrange="-0.68 0.68" />
         </body>
       </body>
+      <camera name="arms" pos="-0.7 0 1.45" xyaxes="0 -1 0 0.5 0 0.87" fovy="60" />
     </body>
   </worldbody>
   <actuator>

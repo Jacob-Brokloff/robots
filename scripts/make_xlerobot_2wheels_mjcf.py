@@ -107,6 +107,11 @@ def build(model: ET.ElementTree) -> ET.ElementTree:
     ):
         chassis.insert(at + i, el)
 
+    # A camera on the robot framing both arms (they sit ~0.9 m up): the dashboard's spawned sims add only a
+    # tabletop "front" camera, which sees the base and the arms' shadows. Behind the robot (0.7 m back, 1.45 m
+    # up) looking forward and down, so the view matches an operator standing behind the leader arms.
+    chassis.append(ET.Element("camera", name="arms", pos="-0.7 0 1.45", xyaxes="0 -1 0 0.5 0 0.87", fovy="60"))
+
     act = root.find("actuator")
     assert _remove_children(act, lambda c: c.get("name") in DROPPED_ACTUATORS) == 6
     ctrl = 1.0 / WHEEL_RADIUS  # 1 m/s at the rim

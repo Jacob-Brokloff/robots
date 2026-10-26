@@ -662,9 +662,16 @@ else:
     except Exception:
         pass
     print(f"{cfg['peer_id']} (sim) online", flush=True)
+    # Fork patch: step as much sim time as wall time passes. step(5) per 0.2 s ran a 2 ms-timestep world at
+    # 5% of real time (now 50 ms of sim per 50 ms of wall), so a twin following a leader moved in slow motion.
+    try:
+        dt = float(sim._world._model.opt.timestep)
+    except Exception:
+        dt = 0.002
     while True:
-        sim.step(5)
-        time.sleep(0.2)
+        t0 = time.monotonic()
+        sim.step(max(1, round(0.05 / dt)))
+        time.sleep(max(0.0, 0.05 - (time.monotonic() - t0)))
 """
 
 _COLLECT_SPAWNER = r"""

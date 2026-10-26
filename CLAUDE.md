@@ -2,13 +2,17 @@
 
 Personal fork for the wireless XLeRobot teleop POC. The fork adds `deploy/`, `scripts/teleop_xlerobot.py`,
 `scripts/agent.py`, the phase 2 scripts below, this file and `plan.md` (the hand-off doc with checkpoint status).
-Upstream conventions live in `AGENTS.md`. Upstream package code is untouched **except three mesh patches**
-(Jacob OK'd, 2026-10-26; each marked `Fork patch` in the code) without which dashboard teleop cannot work:
-`mesh/core.py` `Mesh.send` stamps commands with the presence session (else a real robot refuses every motion
-command "no publisher session id"); `mesh/input.py` `InputPublisher` stamps teleop frames the same way (else
-every follower refuses them `rejected_source`); `mesh/core.py` sim child peers hand `teleop_*` to their
-`Simulation` (else a twin answers "robot does not support teleop_receive"). The image bakes the package in:
-rebuild after touching `strands_robots/`.
+Upstream conventions live in `AGENTS.md`. Upstream package code is untouched **except the dashboard teleop/twin
+patches** (Jacob OK'd, 2026-10-26; each marked `Fork patch` in the code):
+- `mesh/core.py` `Mesh.send` and `mesh/input.py` `InputPublisher` stamp commands / teleop frames with the presence
+  session (else a real robot refuses every motion command "no publisher session id" and every follower refuses
+  frames `rejected_source`).
+- `mesh/core.py` sim child peers route `teleop_*` to their `Simulation`, apply the registry's `teleop_from_real`
+  map (real keys/units -> MJCF radians, slew-limited) and can stop receivers (the sim had no `stop_teleop`).
+- `mesh/core.py` `_publish_sim_cameras` reuses one renderer per thread, closing it when the model is recompiled
+  (fresh renderers cost 150-220 ms each; an unclosed stale one renders noise on this AMD/mesa stack).
+- `dashboard/device_manager.py` spawned sims step at real time (was `step(5)` per 0.2 s, 5% of real time).
+The image bakes the package in: rebuild after touching `strands_robots/`.
 
 Git: `origin` = https://github.com/Jacob-Brokloff/robots, `upstream` = https://github.com/strands-labs/robots,
 branch `main`.
@@ -153,7 +157,10 @@ ends it. The Pi admits it via `STRANDS_ROBOT_COMMAND_ALLOW=teleop_receive@dashbo
 `~/strands-control.env`, and the desktop dashboard's peer id is pinned (`STRANDS_DASHBOARD_PEER_ID`) to match.
 The host caps every command at 5 units per joint from the present position (`--robot.max_relative_target=5`,
 implemented in `xlerobot_host.py`; the plugin's own option has a key bug). The twin button spawns the
-`xlerobot_2wheels` sim; sim teleop from the leaders is not working yet (see plan.md).
+`xlerobot_2wheels` sim (camera `arms`, behind the robot); its teleop panel's "follow leader-arms" mirrors the
+leaders in the sim through `teleop_from_real` in `user_robots.json` (regenerate with
+`scripts/make_xlerobot_teleop_map.py <woodside.json>` after recalibrating; upstream `*_L` is the robot's RIGHT
+arm, so sides are crossed there). Twin cameras run at 15 fps (`STRANDS_MESH_CAMERA_HZ` on the dashboard).
 
 ```bash
 docker compose -f deploy/desktop/docker-compose.yml up -d leader

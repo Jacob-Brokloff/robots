@@ -46,6 +46,9 @@ services:
       # Fixed mesh id (default is dashboard-<host>-<random>): the Pi's STRANDS_ROBOT_COMMAND_ALLOW
       # scopes teleop_receive to this sender.
       STRANDS_DASHBOARD_PEER_ID: dashboard-desktop
+      # Camera rate for the sims this dashboard spawns (twins); inherited by its children. 15 fps keeps a
+      # twin following the leaders smooth; a reused renderer makes it ~10 ms per camera.
+      STRANDS_MESH_CAMERA_HZ: "15"
     volumes:
       - ../strands:/strands
       - ../strands/dashboard-auth:/root/.strands_dashboard

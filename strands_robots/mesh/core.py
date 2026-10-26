@@ -297,6 +297,47 @@ def remote_motion_refusal(
     return None
 
 
+def _real_to_sim_apply(robot_name: str) -> Callable[[Any, dict[str, float]], Any] | None:
+    """Fork patch: the teleop apply for a sim twin whose registry entry declares ``teleop_from_real``.
+
+    A real leader's frames speak the real robot (``left_arm_shoulder_pan.pos`` on lerobot's -100..100
+    scale, gripper 0..100); the sim takes MJCF joints in radians. Per joint the entry gives the frame
+    ``key``, ``scale``, calibrated ``span`` (rad), ``center``, ``sign`` and MJCF ``range`` (clamp):
+    ``q = center + sign * v / (200 | 100) * span``. ``None`` when the robot declares no map, so the
+    mixin's own apply (frames as-is) stays in place.
+    """
+    from strands_robots.registry import get_robot
+
+    spec = (get_robot(robot_name) or {}).get("teleop_from_real") or {}
+    joints = spec.get("joints")
+    if not joints:
+        return None
+    # Each joint slews toward its target at most ``max_rate`` rad/s. The twin spawns at q=0 (arms stretched
+    # out); a first frame that jumps straight to the leaders' folded pose flips the 2-wheel base over.
+    max_rate = float(spec.get("max_rate", 2.0))
+    last: dict[str, float] = {name: min(max(0.0, j["range"][0]), j["range"][1]) for name, j in joints.items()}
+    clock = {"t": None}
+
+    def apply_fn(host: Any, action: dict[str, float], _rn: str = robot_name) -> Any:
+        now = time.monotonic()
+        dt = 0.0 if clock["t"] is None else min(now - clock["t"], 0.1)
+        clock["t"] = now
+        targets = {}
+        for name, j in joints.items():
+            v = action.get(j["key"])
+            if v is None:
+                continue
+            q = j["center"] + j["sign"] * float(v) / (100.0 if j["scale"] == "0_100" else 200.0) * j["span"]
+            lo, hi = j["range"]
+            q = min(max(q, lo), hi)
+            step = max_rate * dt
+            last[name] = min(max(q, last[name] - step), last[name] + step)
+            targets[name] = last[name]
+        return host.send_action(targets, robot_name=_rn) if targets else None
+
+    return apply_fn
+
+
 #: Sentinel stored in :attr:`Mesh._expected_responders` for
 #: broadcast turn_ids. Distinct from any real peer_id (no peer_id
 #: contains a NUL byte).
@@ -2544,12 +2585,24 @@ class Mesh(SensorLoopsMixin):
             # Strip namespace prefix for the published topic name
             short_name = cam_name[len(pfx) :] if pfx and cam_name.startswith(pfx) else cam_name
             try:
-                # Render at a reasonable resolution for mesh streaming
-
-                renderer = mj.Renderer(model, height=480, width=640)
+                # Render at a reasonable resolution for mesh streaming.
+                # Fork patch: renderers are reused, one per thread (an EGL context renders only on the
+                # thread that made it). A fresh mj.Renderer per camera per frame costs 150-220 ms of EGL
+                # setup (2-9 ms reused), which held a two-camera twin at ~2 fps and starved its sim loop.
+                # When the model is recompiled (add_camera) the old renderer is closed first: left open,
+                # every frame of its replacement came out as noise on the AMD/mesa stack.
+                cache = self.__dict__.setdefault("_sim_camera_renderers", {})
+                renderer = cache.get(threading.get_ident())
+                if renderer is None or getattr(renderer, "model", model) is not model:
+                    if renderer is not None:
+                        renderer.close()
+                    renderer = mj.Renderer(model, height=480, width=640)
+                    cache[threading.get_ident()] = renderer
+                gl_context = getattr(renderer, "_gl_context", None)
+                if gl_context is not None:
+                    gl_context.make_current()
                 renderer.update_scene(data, camera=i)
                 frame = renderer.render().copy()
-                renderer.close()
                 if frame is not None and hasattr(frame, "shape") and len(frame.shape) >= 2:
                     cam_frames[short_name] = frame
             except (RuntimeError, ValueError) as exc:
@@ -3579,13 +3632,27 @@ class Mesh(SensorLoopsMixin):
                 return {"error": "source_peer_id required"}
             if hasattr(teleop_host, "start_teleop_receive"):
                 if teleop_robot_name is not None:
-                    return dict(teleop_host.start_teleop_receive(source, dev, robot_name=teleop_robot_name))
+                    apply_fn = _real_to_sim_apply(teleop_robot_name)
+                    return dict(
+                        teleop_host.start_teleop_receive(
+                            source, dev, robot_name=teleop_robot_name, apply_fn=apply_fn
+                        )
+                    )
                 return dict(teleop_host.start_teleop_receive(source, dev))
             return {"error": "robot does not support teleop_receive"}
         if action == "teleop_stop":
             dev = cmd.get("device_name")
             if hasattr(teleop_host, "stop_teleop"):
                 return dict(teleop_host.stop_teleop(dev))
+            # Fork patch: a Simulation can start receivers but has no stop_teleop; stop them here.
+            receivers = getattr(teleop_host, "_input_receivers", None)
+            if isinstance(receivers, dict):
+                stopped = {}
+                for key in [k for k in receivers if dev is None or k.endswith(f"/{dev}")]:
+                    rcv = receivers.pop(key)
+                    rcv.stop()
+                    stopped[key] = rcv.stats
+                return {"status": "success", "content": [{"text": f"stopped {len(stopped)} receiver(s)"}, {"json": {"stopped": stopped}}]}
             return {"error": "robot does not support stop_teleop"}
         return {"error": f"unknown action: {action}"}
 
