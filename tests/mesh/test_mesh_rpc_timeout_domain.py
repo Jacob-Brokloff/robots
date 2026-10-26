@@ -160,7 +160,9 @@ class TestBothPublishersConsultTheSharedDomain:
         called = {ast.unparse(node.func) for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)}
         assert "positive_finite_number_error" in called, f"{method} consults no shared budget domain"
         assert ".wait(timeout=timeout)" in source, f"{method} no longer waits on the budget"
-        assert "self.publish(" in source, f"{method} no longer publishes"
+        # Fork patch: Mesh.send publishes commands through the session-stamped _publish_with_wire_source.
+        publish = "self._publish_with_wire_source(" if "self._publish_with_wire_source(" in source else "self.publish("
+        assert publish in source, f"{method} no longer publishes"
         guard = source.index("positive_finite_number_error")
         assert guard < source.index(".wait(timeout=timeout)")
-        assert guard < source.index("self.publish(")
+        assert guard < source.index(publish)

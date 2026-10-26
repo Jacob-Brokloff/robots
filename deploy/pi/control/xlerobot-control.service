@@ -3,7 +3,7 @@
 # answers fleet `stop`. It moves nothing by itself; rollouts come from `pi_control.py run` over its local socket.
 #   systemctl --user restart xlerobot-control && systemctl --user status xlerobot-control -n 50
 [Unit]
-Description=Strands peer woodside: xlerobot_2wheels_client on the mesh + policy rollouts on request
+Description=Strands peer woodside: xlerobot_2wheels on the mesh + policy rollouts on request
 After=xlerobot-host.service
 Requires=xlerobot-host.service
 # Restart with the host, so the client reconnects to a fresh one.

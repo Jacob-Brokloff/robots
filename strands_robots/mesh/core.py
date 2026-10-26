@@ -3563,22 +3563,29 @@ class Mesh(SensorLoopsMixin):
             return dict(r.step(cmd.get("steps", 1)))
         if action == "reset" and hasattr(r, "reset"):
             return dict(r.reset())
+        # Child SimRobot peer (fork patch): like execute/start above, teleop lives on the parent
+        # Simulation, which routes frames to one robot by robot_name. Without this the dashboard's
+        # "follow" on a sim twin answered "robot does not support teleop_receive".
+        teleop_host = getattr(r, "_sim_parent", None) or r
+        teleop_robot_name = getattr(r, "name", None) if teleop_host is not r else None
         if action == "teleop_status":
-            if hasattr(r, "get_teleop_status"):
-                return dict(r.get_teleop_status())
+            if hasattr(teleop_host, "get_teleop_status"):
+                return dict(teleop_host.get_teleop_status())
             return {"inputs": [], "publishers": {}, "receivers": {}}
         if action == "teleop_receive":
             source = cmd.get("source_peer_id", "")
             dev = cmd.get("device_name", "leader")
             if not source:
                 return {"error": "source_peer_id required"}
-            if hasattr(r, "start_teleop_receive"):
-                return dict(r.start_teleop_receive(source, dev))
+            if hasattr(teleop_host, "start_teleop_receive"):
+                if teleop_robot_name is not None:
+                    return dict(teleop_host.start_teleop_receive(source, dev, robot_name=teleop_robot_name))
+                return dict(teleop_host.start_teleop_receive(source, dev))
             return {"error": "robot does not support teleop_receive"}
         if action == "teleop_stop":
             dev = cmd.get("device_name")
-            if hasattr(r, "stop_teleop"):
-                return dict(r.stop_teleop(dev))
+            if hasattr(teleop_host, "stop_teleop"):
+                return dict(teleop_host.stop_teleop(dev))
             return {"error": "robot does not support stop_teleop"}
         return {"error": f"unknown action: {action}"}
 
@@ -4788,7 +4795,11 @@ class Mesh(SensorLoopsMixin):
             if direct == "offline":
                 return {"status": "error", "error": "peer offline (iot 404)", "peer": target, "delivery": delivery}
             if direct != "delivered":
-                self.publish(f"strands/{target}/cmd", msg)
+                # Fork patch: stamped with this peer's presence session. A hardware peer
+                # attributes every motion command to its sender before any approval is read
+                # (_wire_source_attribution), and a plain publish carries no session id, so
+                # every dashboard/agent motion command was refused "no publisher session id".
+                self._publish_with_wire_source(f"strands/{target}/cmd", msg)
             # What is left of the budget after the delivery leg.
             timeout = max(0.0, deadline - time.monotonic())
             event.wait(timeout=timeout)

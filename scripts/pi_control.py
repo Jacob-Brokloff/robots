@@ -33,7 +33,7 @@ import threading
 import time
 from typing import Any
 
-DEFAULT_TYPE = "xlerobot_2wheels_client"
+DEFAULT_TYPE = "xlerobot_2wheels"  # registry name with both the sim model and the real client (hardware.lerobot_type), so the twin button spawns the sim
 DEFAULT_CAMERAS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "deploy", "pi", "cameras.json")
 DEFAULT_SOCKET = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "strands-control.sock")
 
@@ -54,6 +54,34 @@ def _client_is_calibrated(robot: Any) -> None:
     cls = type(robot.robot)
     if cls.__name__.endswith("Client") and cls.__dict__.get("is_calibrated") is not None:
         cls.is_calibrated = property(lambda self: True)
+
+
+# Measured base velocity below these is wheel-encoder noise on a robot standing still (theta.vel read
+# ~0.9 deg/s at rest).
+VEL_DEADBAND = {"x.vel": 0.01, "theta.vel": 2.0}  # m/s, deg/s
+
+
+def _clean_observation(robot: Any) -> None:
+    """Make the client's observations read still when the robot is still, for the mesh and the dashboard.
+
+    * Drop ``observation.state`` (the 16 keys again, as one vector): Strands takes every non-camera key as a
+      joint, so it went onto the mesh state topic as a 17th "joint".
+    * Zero measured base velocities inside ``VEL_DEADBAND``. The dashboard calls a peer moving when any recent
+      change exceeds 5% of the largest recent change, so constant encoder noise on a still robot read as
+      "arm is MOVING with no task".
+    """
+    client = robot.robot
+    inner = client.get_observation
+
+    def get_observation() -> dict[str, Any]:
+        obs = inner()
+        obs.pop("observation.state", None)
+        for key, band in VEL_DEADBAND.items():
+            if key in obs and abs(obs[key]) < band:
+                obs[key] = 0.0
+        return obs
+
+    client.get_observation = get_observation
 
 
 def observe(robot: Any) -> dict[str, Any]:
@@ -122,6 +150,7 @@ def serve(args: argparse.Namespace) -> None:
         control_frequency=args.control_frequency,
     )
     _client_is_calibrated(robot)
+    _clean_observation(robot)
     # Strands' own connect path (calibration gate, half-open rollback); rollouts reuse the open client, and the
     # mesh state and camera loops publish only while it is connected.
     ok, error = asyncio.run(robot._connect_robot())

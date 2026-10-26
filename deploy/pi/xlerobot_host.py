@@ -16,6 +16,7 @@ import json
 import logging
 
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
+from lerobot.robots.utils import ensure_safe_goal_position
 from lerobot_robot_xlerobot_2wheels.config_xlerobot_2wheels import XLerobot2WheelsConfig, XLerobot2WheelsHostConfig
 from lerobot_robot_xlerobot_2wheels.xlerobot_2wheels_host import XLerobot2WheelsHost
 
@@ -36,6 +37,31 @@ def load_cameras(path: str | None) -> dict[str, OpenCVCameraConfig]:
     return cameras
 
 
+def cap_relative_target(robot, max_step: float) -> None:
+    """Clamp every commanded joint to ``max_step`` from where it is now, per command.
+
+    The plugin's own ``max_relative_target`` path looks present positions up without the ``.pos`` suffix
+    (``KeyError: 'left_arm_shoulder_pan.pos'``), so with it set the host refused every command. Same
+    clamp (lerobot's ``ensure_safe_goal_position``), keys fixed, the plugin's option left at None.
+    """
+    inner = robot.send_action
+
+    def send_action(action):
+        goal = {k: v for k, v in action.items() if k.endswith(".pos")}
+        if goal:
+            present = {}
+            for bus, motors in (
+                (robot.bus1, robot.left_arm_motors + robot.head_motors),
+                (robot.bus2, robot.right_arm_motors),
+            ):
+                present.update({f"{m}.pos": v for m, v in bus.sync_read("Present_Position", motors).items()})
+            safe = ensure_safe_goal_position({k: (g, present[k]) for k, g in goal.items() if k in present}, float(max_step))
+            action = {**action, **safe}
+        return inner(action)
+
+    robot.send_action = send_action
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -43,6 +69,10 @@ def main() -> None:
     p.add_argument("--robot.port1", dest="port1", default="/dev/ttyACM0", help="left arm + head bus")
     p.add_argument("--robot.port2", dest="port2", default="/dev/ttyACM1", help="right arm + wheels bus")
     p.add_argument("--cameras", help="cameras.json; omit for no cameras")
+    p.add_argument(
+        "--robot.max_relative_target", dest="max_relative_target", type=float, default=None,
+        help="cap each command's step from the present position, per joint (arm/head units); none by default",
+    )
     p.add_argument("--host.connection_time_s", dest="connection_time_s", type=int, default=3600)
     p.add_argument("--host.max_loop_freq_hz", dest="max_loop_freq_hz", type=int, default=30)
     args = p.parse_args()
@@ -54,6 +84,9 @@ def main() -> None:
         connection_time_s=args.connection_time_s, max_loop_freq_hz=args.max_loop_freq_hz
     )
     host = XLerobot2WheelsHost(robot_config, host_config)
+    if args.max_relative_target is not None:
+        cap_relative_target(host.robot, args.max_relative_target)
+    logger.info("max_relative_target: %s", args.max_relative_target)
     try:
         host.connect()
         host.run()

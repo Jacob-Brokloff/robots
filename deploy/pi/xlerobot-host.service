@@ -13,7 +13,9 @@ Environment=PYTHONUNBUFFERED=1
 # to add the cameras in cameras.json (CP11); the plugin's own CLI cannot configure any.
 ExecStart=/bin/sh -c 'printf "\\n" | exec @VENV@/bin/python @HERE@/xlerobot_host.py \
     --robot.id=@ROBOT_ID@ --robot.port1=@PORT1@ --robot.port2=@PORT2@ --cameras=@HERE@/cameras.json \
-    --host.connection_time_s=315360000'
+    --host.connection_time_s=315360000 --robot.max_relative_target=5'
+# max_relative_target=5: no command moves a joint more than 5 units (of -100..100) from where it is, so at
+# 30 Hz <= 150 units/s. Mesh teleop has no glide; a leader pose far from the robot becomes a ~1 s approach.
 # The plugin's default connection_time_s (3600) makes the host exit hourly, and that clean exit DISABLES
 # TORQUE on both arms (disable_torque_on_disconnect) before the restart below re-enables it: unsupported
 # arms drop every hour. 10 years instead; Restart only covers crashes. The host replaces woodside-supervisor

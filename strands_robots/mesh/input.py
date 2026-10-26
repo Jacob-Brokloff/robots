@@ -477,12 +477,12 @@ class InputPublisher:
                     "action": action_dict,
                     "events": events,
                 }
-                # Route through Mesh.publish() -- the documented single
-                # publish chokepoint -- so this teleop actuation stream is
-                # covered by any audit/telemetry/compression hook landing
-                # there, exactly like sensor/state/command publishers. The
-                # receiver side already goes through self.mesh.subscribe().
-                self.mesh.publish(self.topic, payload)
+                # Fork patch: stamped with this peer's presence session, because every
+                # InputReceiver binds its stream to that session and refuses a frame that
+                # carries none ("publisher session none") - through plain Mesh.publish()
+                # every frame was rejected_source and mesh teleop never moved a follower.
+                publish = getattr(self.mesh, "_publish_with_wire_source", None) or self.mesh.publish
+                publish(self.topic, payload)
                 self._seq += 1
                 self._frame_count += 1
             except Exception as exc:

@@ -43,6 +43,9 @@ services:
       <<: *gpu
       STRANDS_BASE_DIR: /strands
       DASHBOARD_AUTH_TOKEN: ""
+      # Fixed mesh id (default is dashboard-<host>-<random>): the Pi's STRANDS_ROBOT_COMMAND_ALLOW
+      # scopes teleop_receive to this sender.
+      STRANDS_DASHBOARD_PEER_ID: dashboard-desktop
     volumes:
       - ../strands:/strands
       - ../strands/dashboard-auth:/root/.strands_dashboard
@@ -51,6 +54,17 @@ services:
       - ../xlerobot_client:/opt/strands/deploy/xlerobot_client
       - /dev/serial/by-id:/dev/serial/by-id:ro
     command: ["strands-robots", "dashboard", "--host", "127.0.0.1", "--port", "8090"]
+
+  # The two leader arms as mesh peer `leader-arms`, publishing teleop stream `leader`, so the dashboard's
+  # "follow" works (scripts/leader_peer.py). Holds both leader ports while up: stop it before running
+  # teleop_xlerobot.py or lerobot-record against the leaders.
+  leader:
+    <<: *robot
+    restart: unless-stopped
+    environment:
+      STRANDS_BASE_DIR: /strands
+    working_dir: /opt/strands/scripts
+    command: ["python", "leader_peer.py"]
 
   robot-client:
     <<: *robot

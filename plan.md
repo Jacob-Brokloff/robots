@@ -507,6 +507,33 @@ one-liners; mark the vLLM/Qwen rows retired; this status table.
 - Process exit prints `terminate called without an active exception` (a native thread at teardown, after the
   result is printed); harmless so far.
 
+### Dashboard teleop and twin (2026-10-26, after block 3; verified in the real dashboard via Jacob's Chrome)
+
+Earlier sim checks (CP8-CP10) went through the API on a token dashboard; nobody had used the dashboard UI for
+the twin or teleop. Doing so found:
+
+- **Twin**: `woodside` ran as `xlerobot_2wheels_client` (real-only), so "+ twin" failed. It now runs as
+  `xlerobot_2wheels` (sim model + `hardware.lerobot_type`); the twin spawns and streams.
+- **"Moving" banner on a still robot**: the 2-wheel client's `observation.state` vector went out as a 17th joint
+  and wheel-encoder noise on `theta.vel` (~0.9 deg/s at rest) tripped the dashboard's relative motion test.
+  `pi_control.py` drops the vector and deadbands base velocity; the card reads idle.
+- **No leader on the fleet**: `scripts/leader_peer.py` (compose `leader`, peer `leader-arms`) puts both leaders
+  on the mesh and publishes the teleop stream (no peer answers the dashboard's `teleop/publish`).
+- **Three upstream mesh bugs** (patched in the fork, see CLAUDE.md): commands and teleop frames were published
+  without the session id that hardware robots and teleop receivers require (the real cause of CP5's "no
+  publisher session id" too), and sim child peers did not route `teleop_*` to their world.
+- **Approval**: `STRANDS_ROBOT_COMMAND_ALLOW=teleop_receive@dashboard-desktop` on the Pi (Jacob's call); the desktop
+  dashboard's peer id is pinned so the scope survives restarts.
+- **Step cap**: the plugin's `max_relative_target` looks present positions up without `.pos` (KeyError on every
+  command, nothing moves); `xlerobot_host.py` implements the same clamp with the keys fixed, 5 units per command.
+- **Result**: woodside follows `leader-arms` from the dashboard at ~30 Hz, held joints within ~3 units of the
+  leader, "stop teleop" ends it. Jacob at the robot.
+- **Still open, sim teleop**: frames reach the twin, but the sim takes MJCF names or bare labels in radians, while
+  the stream is `left_arm_*.pos` on the real -100..100 scale (gripper 0..100). It needs a per-joint conversion
+  (calibration range, sign and zero offset between MJCF and arm), and the sim has no mesh `teleop_stop`
+  (`stop_teleop` exists only on the hardware Robot). Also note the dashboard said "start was sent" while the twin
+  had answered an error.
+
 ### Risks
 
 - pi0.5 LoRA on one A40 should fit at small batch in bf16; otherwise SmolVLA.

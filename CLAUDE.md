@@ -1,8 +1,14 @@
 # CLAUDE.md - Jacere fork of strands-labs/robots
 
-Personal fork for the wireless XLeRobot teleop POC. Upstream package code is untouched; the fork
-adds `deploy/`, `scripts/teleop_xlerobot.py`, `scripts/agent.py`, the phase 2 scripts below, this file
-and `plan.md` (the hand-off doc with checkpoint status). Upstream conventions live in `AGENTS.md`.
+Personal fork for the wireless XLeRobot teleop POC. The fork adds `deploy/`, `scripts/teleop_xlerobot.py`,
+`scripts/agent.py`, the phase 2 scripts below, this file and `plan.md` (the hand-off doc with checkpoint status).
+Upstream conventions live in `AGENTS.md`. Upstream package code is untouched **except three mesh patches**
+(Jacob OK'd, 2026-10-26; each marked `Fork patch` in the code) without which dashboard teleop cannot work:
+`mesh/core.py` `Mesh.send` stamps commands with the presence session (else a real robot refuses every motion
+command "no publisher session id"); `mesh/input.py` `InputPublisher` stamps teleop frames the same way (else
+every follower refuses them `rejected_source`); `mesh/core.py` sim child peers hand `teleop_*` to their
+`Simulation` (else a twin answers "robot does not support teleop_receive"). The image bakes the package in:
+rebuild after touching `strands_robots/`.
 
 Git: `origin` = https://github.com/Jacob-Brokloff/robots, `upstream` = https://github.com/strands-labs/robots,
 branch `main`.
@@ -139,6 +145,20 @@ ssh jbit@192.168.1.82 'docker stop nudge-server'
 Phase 2 files written, not yet run: pod `deploy/runpod/{bootstrap,train,serve_policy}.sh`
 + `scripts/train_pi05.py` / `scripts/serve_policy.py`; shared embodiment `scripts/xlerobot_embodiment.py`.
 
+Dashboard teleop (CP11 follow-up, verified in the real dashboard 2026-10-26): `leader` compose service runs
+`scripts/leader_peer.py`, mesh peer `leader-arms` (both leaders as one read-only robot, joints in XLeRobot keys,
+publishing teleop stream `leader` at 30 Hz; it holds both leader ports, so stop it before `teleop_xlerobot.py`
+or `lerobot-record`). In the dashboard: woodside card > teleop > "follow leader-arms" > confirm; "stop teleop"
+ends it. The Pi admits it via `STRANDS_ROBOT_COMMAND_ALLOW=teleop_receive@dashboard-desktop` in
+`~/strands-control.env`, and the desktop dashboard's peer id is pinned (`STRANDS_DASHBOARD_PEER_ID`) to match.
+The host caps every command at 5 units per joint from the present position (`--robot.max_relative_target=5`,
+implemented in `xlerobot_host.py`; the plugin's own option has a key bug). The twin button spawns the
+`xlerobot_2wheels` sim; sim teleop from the leaders is not working yet (see plan.md).
+
+```bash
+docker compose -f deploy/desktop/docker-compose.yml up -d leader
+```
+
 Desktop dashboard (always on; passkey store persisted in `deploy/strands/dashboard-auth/`):
 
 ```bash
@@ -207,6 +227,9 @@ docker compose -f deploy/vm/docker-compose.yml exec dashboard strands-robots doc
 - Raw camera frames on the PolicyServer wire cost ~1 s per call over the Pi's WiFi (3 x 640x480 ~ 3.7 MB);
   `pi_control.py` drops them for image-free policies. Pi aarch64 torch: CPU index, `torch==2.11.0` (see install.sh).
 - The VM dashboard drops woodside's mesh replies under auth `none` (`no_answer`), but `stop` still halts the robot.
+- The dashboard calls a peer "moving" when any recent state change exceeds 5% of the largest recent change, so
+  sensor noise on a still robot reads as motion. `pi_control.py` drops the client's packed `observation.state`
+  and zeroes base velocity below 0.01 m/s / 2 deg/s for that reason.
 - The dashboard at :8090 is passkey-only. To script `/api/sim`, run a second one in the `sim` service with
   `-e DASHBOARD_AUTH_TOKEN=<random> ... strands-robots dashboard --host 127.0.0.1 --port 8091` and send
   `Authorization: Bearer <token>`; remove it afterwards.
