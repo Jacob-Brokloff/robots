@@ -1,0 +1,17 @@
+# systemd *user* unit for the Pi control loop (CP11/CP14). Installed by install.sh; never enabled:
+# each start is one bounded rollout (POLICY_DURATION), started by hand with Jacob at the robot.
+#   systemctl --user start xlerobot-control && journalctl --user -u xlerobot-control -f
+# `systemctl --user stop xlerobot-control` sends SIGTERM, which pi_control.py turns into stop_task.
+[Unit]
+Description=Strands control loop: xlerobot_2wheels_client + remote policy (POLICY_ENDPOINT)
+After=xlerobot-host.service
+Requires=xlerobot-host.service
+
+[Service]
+Type=simple
+EnvironmentFile=%h/strands-control.env
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=@REPO@/scripts
+ExecStart=@VENV@/bin/python @REPO@/scripts/pi_control.py
+Restart=no
+TimeoutStopSec=15

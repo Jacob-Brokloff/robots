@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Install the Pi control loop (CP11): a venv with the fork + the XLeRobot plugins, and the
+# xlerobot-control systemd user unit (installed, not enabled, not started). From the desktop:
+#   ssh xlerobot 'git clone https://github.com/Jacob-Brokloff/robots ~/robots || git -C ~/robots pull --ff-only'
+#   ssh xlerobot 'bash ~/robots/deploy/pi/control/install.sh'
+# Runs next to xlerobot-host (deploy/pi/), which keeps its own ~/xlerobot-runtime venv.
+set -euo pipefail
+
+VENV="${VENV:-$HOME/strands-control}"
+REPO="${REPO:-$HOME/robots}"
+XLEROBOT_SRC="${XLEROBOT_SRC:-$HOME/xlerobot-source}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+
+[ -d "$VENV" ] || uv venv --python 3.13 "$VENV"
+# CPU torch: the policy runs on RunPod; lerobot still imports torch for the client's types.
+VIRTUAL_ENV="$VENV" UV_TORCH_BACKEND=cpu uv pip install -e "$REPO[lerobot,mesh,inference]" pyzmq
+VIRTUAL_ENV="$VENV" uv pip install --no-deps \
+  "$XLEROBOT_SRC/software/plugins/xlerobot_model" \
+  "$XLEROBOT_SRC/software/plugins/lerobot_robot_xlerobot" \
+  "$XLEROBOT_SRC/software/plugins/lerobot_robot_xlerobot_2wheels" \
+  -e "$REPO/deploy/xlerobot_client"
+
+# Registry overlay with xlerobot_2wheels_client, shared with the desktop.
+mkdir -p "$HOME/.strands_robots"
+cp "$REPO/deploy/strands/user_robots.json" "$HOME/.strands_robots/user_robots.json"
+
+[ -f "$HOME/strands-control.env" ] || cp "$HERE/strands-control.env.example" "$HOME/strands-control.env"
+mkdir -p "$HOME/.config/systemd/user"
+sed -e "s|@VENV@|$VENV|g" -e "s|@REPO@|$REPO|g" "$HERE/xlerobot-control.service" \
+  > "$HOME/.config/systemd/user/xlerobot-control.service"
+systemctl --user daemon-reload
+echo "Installed $VENV and ~/.config/systemd/user/xlerobot-control.service (not enabled, not started)."
+echo "Edit ~/strands-control.env (POLICY_ENDPOINT, ZENOH_CONNECT), then with xlerobot-host running:"
+echo "  $VENV/bin/python $REPO/scripts/pi_control.py --dry-run"
