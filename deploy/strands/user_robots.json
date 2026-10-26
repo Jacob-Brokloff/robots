@@ -61,6 +61,50 @@
       "hardware": {
         "lerobot_type": "xlerobot_client"
       }
+    },
+    "xlerobot_2wheels": {
+      "description": "XLeRobot 2-wheel sim (fork MJCF derived from upstream; meshes from the xlerobot asset) and the real 2-wheel client",
+      "category": "mobile_manip",
+      "joints": 16,
+      "joint_labels": {
+        "Rotation_L": "left_arm_shoulder_pan",
+        "Pitch_L": "left_arm_shoulder_lift",
+        "Elbow_L": "left_arm_elbow_flex",
+        "Wrist_Pitch_L": "left_arm_wrist_flex",
+        "Wrist_Roll_L": "left_arm_wrist_roll",
+        "Jaw_L": "left_arm_gripper",
+        "Rotation_R": "right_arm_shoulder_pan",
+        "Pitch_R": "right_arm_shoulder_lift",
+        "Elbow_R": "right_arm_elbow_flex",
+        "Wrist_Pitch_R": "right_arm_wrist_flex",
+        "Wrist_Roll_R": "right_arm_wrist_roll",
+        "Jaw_R": "right_arm_gripper",
+        "head_pan_joint": "head_motor_1",
+        "head_tilt_joint": "head_motor_2",
+        "left_wheel": "base_left_wheel",
+        "right_wheel": "base_right_wheel"
+      },
+      "gripper": {
+        "actuators": [
+          "Jaw_L",
+          "Jaw_R"
+        ],
+        "closed": "low",
+        "open": "high"
+      },
+      "asset": {
+        "dir": "xlerobot_2wheels",
+        "model_xml": "xlerobot_2wheels.xml",
+        "scene_xml": "scene.xml",
+        "source": {
+          "type": "github",
+          "repo": "Jacob-Brokloff/robots",
+          "subdir": "deploy/sim/xlerobot_2wheels"
+        }
+      },
+      "hardware": {
+        "lerobot_type": "xlerobot_2wheels_client"
+      }
     }
   }
 }
