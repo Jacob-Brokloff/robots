@@ -122,13 +122,17 @@ Sim robots in `user_robots.json`: `xlerobot` (upstream 3-omniwheel MJCF, from Gi
 (fork MJCF from `deploy/sim/xlerobot_2wheels` on GitHub; reads `xlerobot`'s meshes, so `xlerobot` must be
 downloaded first). Assets cache in `deploy/strands/assets/` (root-owned). Both spawn from the dashboard.
 
-Phase 2 Pi loop (CP11, run): venv `~/strands-control`, clone `~/robots` on the Pi, `xlerobot-control.service`
-user unit (never enabled), `~/strands-control.env`. With `xlerobot-host` running:
+Phase 2 Pi peer (CP11): venv `~/strands-control`, clone `~/robots` on the Pi, `~/strands-control.env`.
+`xlerobot-control.service` (enabled, `PartOf` the host) runs `pi_control.py serve`: the always-on mesh peer
+`woodside` that owns the host's only client, publishes joints + 3 cameras (5 Hz) to every dashboard's fleet
+view, answers fleet `stop`, and runs rollouts asked for on its local socket (`/run/user/1000/strands-control.sock`).
+The host has one observation PUSH socket (round-robin), so nothing else may connect a client while it runs.
 
 ```bash
-ssh xlerobot 'set -a; . ~/strands-control.env; set +a; ~/strands-control/bin/python ~/robots/scripts/pi_control.py --dry-run'
+ssh xlerobot '~/strands-control/bin/python ~/robots/scripts/pi_control.py observe'   # keys + frame shapes
 ssh jbit@192.168.1.82 'cd ~/robots && docker compose -f deploy/vm/docker-compose.yml run -d --rm --name nudge-server --no-deps dashboard python scripts/serve_nudge.py --host 100.70.150.7'
-ssh xlerobot 'set -a; . ~/strands-control.env; set +a; ~/strands-control/bin/python ~/robots/scripts/pi_control.py --duration 10'   # moves the left gripper
+ssh xlerobot 'set -a; . ~/strands-control.env; set +a; ~/strands-control/bin/python ~/robots/scripts/pi_control.py run --duration 10'   # moves the left gripper
+ssh xlerobot '~/strands-control/bin/python ~/robots/scripts/pi_control.py stop'
 ssh jbit@192.168.1.82 'docker stop nudge-server'
 ```
 

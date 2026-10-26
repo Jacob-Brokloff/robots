@@ -1,17 +1,23 @@
-# systemd *user* unit for the Pi control loop (CP11/CP14). Installed by install.sh; never enabled:
-# each start is one bounded rollout (POLICY_DURATION), started by hand with Jacob at the robot.
-#   systemctl --user start xlerobot-control && journalctl --user -u xlerobot-control -f
-# `systemctl --user stop xlerobot-control` sends SIGTERM, which pi_control.py turns into stop_task.
+# systemd *user* unit for the robot's Strands peer (`pi_control.py serve`, peer id `woodside`). Installed by
+# install.sh, enabled: it owns the one client of xlerobot-host, publishes state and cameras on the mesh and
+# answers fleet `stop`. It moves nothing by itself; rollouts come from `pi_control.py run` over its local socket.
+#   systemctl --user restart xlerobot-control && systemctl --user status xlerobot-control -n 50
 [Unit]
-Description=Strands control loop: xlerobot_2wheels_client + remote policy (POLICY_ENDPOINT)
+Description=Strands peer woodside: xlerobot_2wheels_client on the mesh + policy rollouts on request
 After=xlerobot-host.service
 Requires=xlerobot-host.service
+# Restart with the host, so the client reconnects to a fresh one.
+PartOf=xlerobot-host.service
 
 [Service]
 Type=simple
 EnvironmentFile=%h/strands-control.env
 Environment=PYTHONUNBUFFERED=1
 WorkingDirectory=@REPO@/scripts
-ExecStart=@VENV@/bin/python @REPO@/scripts/pi_control.py
-Restart=no
+ExecStart=@VENV@/bin/python @REPO@/scripts/pi_control.py serve
+Restart=on-failure
+RestartSec=5
 TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

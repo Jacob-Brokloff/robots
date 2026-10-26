@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install the Pi control loop (CP11): a venv with the fork + the XLeRobot plugins, and the
-# xlerobot-control systemd user unit (installed, not enabled, not started). From the desktop:
+# xlerobot-control systemd user unit (the woodside peer; enabled, not started). From the desktop:
 #   ssh xlerobot 'git clone https://github.com/Jacob-Brokloff/robots ~/robots || git -C ~/robots pull --ff-only'
 #   ssh xlerobot 'bash ~/robots/deploy/pi/control/install.sh'
 # Runs next to xlerobot-host (deploy/pi/), which keeps its own ~/xlerobot-runtime venv.
@@ -36,6 +36,7 @@ mkdir -p "$HOME/.config/systemd/user"
 sed -e "s|@VENV@|$VENV|g" -e "s|@REPO@|$REPO|g" "$HERE/xlerobot-control.service" \
   > "$HOME/.config/systemd/user/xlerobot-control.service"
 systemctl --user daemon-reload
-echo "Installed $VENV and ~/.config/systemd/user/xlerobot-control.service (not enabled, not started)."
-echo "Edit ~/strands-control.env (POLICY_ENDPOINT, ZENOH_CONNECT), then with xlerobot-host running:"
-echo "  $VENV/bin/python $REPO/scripts/pi_control.py --dry-run"
+systemctl --user enable xlerobot-control
+echo "Installed $VENV and ~/.config/systemd/user/xlerobot-control.service (enabled; restart it to pick up changes)."
+echo "With xlerobot-host running: systemctl --user restart xlerobot-control, then"
+echo "  $VENV/bin/python $REPO/scripts/pi_control.py observe"
