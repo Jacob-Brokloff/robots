@@ -25,7 +25,8 @@ if ! "$VENV/bin/python" -c "import lerobot_robot_xlerobot_2wheels, zmq" 2>/dev/n
 fi
 
 mkdir -p "$HOME/.config/systemd/user"
-sed -e "s|@VENV@|$VENV|g" -e "s|@ROBOT_ID@|$ROBOT_ID|g" -e "s|@PORT1@|$PORT1|g" -e "s|@PORT2@|$PORT2|g" \
+HERE="$(cd "$(dirname "$0")" && pwd)"
+sed -e "s|@VENV@|$VENV|g" -e "s|@HERE@|$HERE|g" -e "s|@ROBOT_ID@|$ROBOT_ID|g" -e "s|@PORT1@|$PORT1|g" -e "s|@PORT2@|$PORT2|g" \
   "$(dirname "$0")/xlerobot-host.service" > "$HOME/.config/systemd/user/xlerobot-host.service"
 systemctl --user daemon-reload
 echo "Installed ~/.config/systemd/user/xlerobot-host.service (not started)."

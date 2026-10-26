@@ -9,7 +9,8 @@ dashboard / fleet ``stop`` reaches it, and runs the policy at ``POLICY_ENDPOINT`
 ``Robot.run_policy``, in this process. SIGTERM / Ctrl+C stop the task through ``stop_task``.
 
 Env (``~/strands-control.env`` under ``xlerobot-control.service``; flags win): POLICY_ENDPOINT,
-POLICY_INSTRUCTION, POLICY_DURATION, CONTROL_FREQUENCY, ROBOT_REMOTE_IP, MESH_PEER_ID, XLEROBOT_TYPE.
+POLICY_INSTRUCTION, POLICY_DURATION, CONTROL_FREQUENCY, ROBOT_REMOTE_IP, MESH_PEER_ID, XLEROBOT_TYPE,
+ROBOT_CAMERAS (the host's ``deploy/pi/cameras.json``: the client drops frames whose names it does not know).
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from strands_robots import Robot
 from strands_robots.policies import create_policy
 
 DEFAULT_TYPE = "xlerobot_2wheels_client"
+DEFAULT_CAMERAS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "deploy", "pi", "cameras.json")
 
 
 def _describe(value: Any) -> str:
@@ -34,6 +36,17 @@ def _describe(value: Any) -> str:
     if shape is not None:
         return f"array{tuple(shape)} {getattr(value, 'dtype', '')}".strip()
     return f"{type(value).__name__} {value!r}"[:80]
+
+
+def _client_is_calibrated(robot: Any) -> None:
+    """The plugin client's ``is_calibrated`` is a bare ``pass`` (None), which Strands' connect gate refuses.
+
+    Calibration belongs to the host: ``xlerobot-host`` restores ``woodside.json`` onto the motors at connect.
+    lerobot's contract for the property is "always True if not applicable", so say so for the client class.
+    """
+    cls = type(robot.robot)
+    if cls.__name__.endswith("Client") and cls.__dict__.get("is_calibrated") is not None:
+        cls.is_calibrated = property(lambda self: True)
 
 
 def dry_run(robot: Any) -> None:
@@ -52,14 +65,21 @@ def dry_run(robot: Any) -> None:
 
 
 def _time_inference(policy: Any) -> list[float]:
-    """Wrap ``policy.get_actions`` (instance attribute) and collect per-call wall time in ms."""
+    """Wrap ``policy.get_actions`` (instance attribute) and collect per-call wall time in ms.
+
+    The hardware loop sends every camera frame whatever the policy's ``requires_images`` says. Three raw
+    640x480 frames are ~3.7 MB per call on the wire, ~1 s over the Pi's WiFi (4 ms without), so frames are
+    dropped here when the server says it does not need them.
+    """
     samples: list[float] = []
     inner = policy.get_actions
 
-    async def timed(*args: Any, **kwargs: Any) -> Any:
+    async def timed(observation_dict: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
+        if not policy.requires_images:
+            observation_dict = {k: v for k, v in observation_dict.items() if getattr(v, "ndim", 0) < 2}
         t0 = time.perf_counter()
         try:
-            return await inner(*args, **kwargs)
+            return await inner(observation_dict, *args, **kwargs)
         finally:
             samples.append((time.perf_counter() - t0) * 1000.0)
 
@@ -102,18 +122,25 @@ def main() -> None:
     p.add_argument("--control-frequency", type=float, default=float(env("CONTROL_FREQUENCY", "30")), help="Hz (host loops at 30)")
     p.add_argument("--remote-ip", default=env("ROBOT_REMOTE_IP", "127.0.0.1"), help="xlerobot-host address")
     p.add_argument("--peer-id", default=env("MESH_PEER_ID", "woodside"))
+    p.add_argument("--cameras", default=env("ROBOT_CAMERAS", DEFAULT_CAMERAS), help="cameras.json ('' for none)")
     p.add_argument("--no-mesh", action="store_true", help="do not join the Zenoh mesh")
     p.add_argument("--dry-run", action="store_true", help="connect, print observation keys and frame shapes, exit")
     args = p.parse_args()
 
+    cameras = None
+    if args.cameras:
+        with open(args.cameras) as f:
+            cameras = json.load(f)
     robot = Robot(
         env("XLEROBOT_TYPE", DEFAULT_TYPE),
+        cameras=cameras,
         mode="real",
         remote_ip=args.remote_ip,
         mesh=not args.no_mesh,
         peer_id=args.peer_id,
         control_frequency=args.control_frequency,
     )
+    _client_is_calibrated(robot)
     if args.dry_run:
         dry_run(robot)
         return

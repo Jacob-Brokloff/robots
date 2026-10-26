@@ -9,9 +9,10 @@ After=network-online.target
 Type=simple
 Environment=PYTHONUNBUFFERED=1
 # connect() asks on stdin whether to restore calibration from file; answer Enter (restore).
-# port1 = left arm + head bus, port2 = right arm + wheels bus.
-ExecStart=/bin/sh -c 'printf "\\n" | exec @VENV@/bin/python -m lerobot_robot_xlerobot_2wheels.xlerobot_2wheels_host \
-    --robot.id=@ROBOT_ID@ --robot.port1=@PORT1@ --robot.port2=@PORT2@'
+# port1 = left arm + head bus, port2 = right arm + wheels bus. xlerobot_host.py wraps the plugin host
+# to add the cameras in cameras.json (CP11); the plugin's own CLI cannot configure any.
+ExecStart=/bin/sh -c 'printf "\\n" | exec @VENV@/bin/python @HERE@/xlerobot_host.py \
+    --robot.id=@ROBOT_ID@ --robot.port1=@PORT1@ --robot.port2=@PORT2@ --cameras=@HERE@/cameras.json'
 # The host exits after connection_time_s (3600 s); bring it back.
 Restart=always
 RestartSec=3

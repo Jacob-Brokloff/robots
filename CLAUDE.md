@@ -122,9 +122,17 @@ Sim robots in `user_robots.json`: `xlerobot` (upstream 3-omniwheel MJCF, from Gi
 (fork MJCF from `deploy/sim/xlerobot_2wheels` on GitHub; reads `xlerobot`'s meshes, so `xlerobot` must be
 downloaded first). Assets cache in `deploy/strands/assets/` (root-owned). Both spawn from the dashboard.
 
-Phase 2 files written, not yet run: Pi loop `deploy/pi/control/` (`install.sh`, `xlerobot-control.service`
-user unit, never enabled, `~/strands-control.env`) + `scripts/pi_control.py [--dry-run]`;
-`scripts/serve_nudge.py` (VM, first remote motion); pod `deploy/runpod/{bootstrap,train,serve_policy}.sh`
+Phase 2 Pi loop (CP11, run): venv `~/strands-control`, clone `~/robots` on the Pi, `xlerobot-control.service`
+user unit (never enabled), `~/strands-control.env`. With `xlerobot-host` running:
+
+```bash
+ssh xlerobot 'set -a; . ~/strands-control.env; set +a; ~/strands-control/bin/python ~/robots/scripts/pi_control.py --dry-run'
+ssh jbit@192.168.1.82 'cd ~/robots && docker compose -f deploy/vm/docker-compose.yml run -d --rm --name nudge-server --no-deps dashboard python scripts/serve_nudge.py --host 100.70.150.7'
+ssh xlerobot 'set -a; . ~/strands-control.env; set +a; ~/strands-control/bin/python ~/robots/scripts/pi_control.py --duration 10'   # moves the left gripper
+ssh jbit@192.168.1.82 'docker stop nudge-server'
+```
+
+Phase 2 files written, not yet run: pod `deploy/runpod/{bootstrap,train,serve_policy}.sh`
 + `scripts/train_pi05.py` / `scripts/serve_policy.py`; shared embodiment `scripts/xlerobot_embodiment.py`.
 
 Desktop dashboard (always on; passkey store persisted in `deploy/strands/dashboard-auth/`):
@@ -141,10 +149,11 @@ Agent motion check (needs mesh mTLS before the robot will accept it): `scripts/r
 with `STRANDS_ROBOT_COMMAND_ALLOW=execute STRANDS_MESH_POLICY_TYPE_ALLOW=nudge`, then `~/cp5_nudge.sh` on the VM
 (also needs `STRANDS_MESH_POLICY_TYPE_ALLOW=nudge`). `scripts/agent.py` prompts `Approve? [y/N]` for gated actions.
 
-Pi (the host needs both motor buses, which `woodside-supervisor` holds while it runs):
+Pi (the host needs both motor buses, which `woodside-supervisor` holds while it runs). Since CP11 the unit runs
+`~/robots/deploy/pi/xlerobot_host.py` with the cameras in `~/robots/deploy/pi/cameras.json`:
 
 ```bash
-scp -r deploy/pi xlerobot:strands-pi && ssh xlerobot 'bash ~/strands-pi/install.sh'   # installed already
+ssh xlerobot 'bash ~/robots/deploy/pi/install.sh'   # installed already; rerun after editing the unit or cameras
 ssh xlerobot 'systemctl --user stop woodside-supervisor && systemctl --user start xlerobot-host'
 ssh xlerobot 'journalctl --user -u xlerobot-host -f'
 ssh xlerobot 'systemctl --user stop xlerobot-host && systemctl --user start woodside-supervisor'   # hand back
@@ -188,6 +197,11 @@ docker compose -f deploy/vm/docker-compose.yml exec dashboard strands-robots doc
   The GPU is used only for MuJoCo's EGL rendering (mesa, `/dev/dri`).
 - At the pinned XLeRobot ref the 2-wheel plugin configures **no cameras** (`cameras={}`), and the client drops
   frames whose names are not in its own `config.cameras`; host and client both need the camera config.
+  `deploy/pi/cameras.json` is that config (`head` = D415 colour `/dev/video4`, `left_wrist`/`right_wrist` =
+  USB ports 1.1/1.2, sides unverified), read by `deploy/pi/xlerobot_host.py` and `pi_control.py --cameras`.
+- Raw camera frames on the PolicyServer wire cost ~1 s per call over the Pi's WiFi (3 x 640x480 ~ 3.7 MB);
+  `pi_control.py` drops them for image-free policies. Pi aarch64 torch: CPU index, `torch==2.11.0` (see install.sh).
+- The VM dashboard drops woodside's mesh replies under auth `none` (`no_answer`), but `stop` still halts the robot.
 - The dashboard at :8090 is passkey-only. To script `/api/sim`, run a second one in the `sim` service with
   `-e DASHBOARD_AUTH_TOKEN=<random> ... strands-robots dashboard --host 127.0.0.1 --port 8091` and send
   `Authorization: Bearer <token>`; remove it afterwards.

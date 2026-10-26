@@ -64,6 +64,8 @@ class NudgePolicy(Policy):
                 v = observation_dict.get(k, observation_dict.get(f"{k}.pos"))
                 if v is None:
                     raise ValueError(f"NudgePolicy: observation has no value for {k!r}; refusing to guess a pose")
+                if getattr(v, "ndim", 0):
+                    continue  # a packed vector, e.g. the 2-wheel client's ``observation.state``; not a joint
                 self._start[k] = float(v)
             if not any(k in (self.joint, self.joint.removesuffix(".pos")) for k in self._start):
                 raise ValueError(f"NudgePolicy: joint {self.joint!r} is not one of the robot's keys")
