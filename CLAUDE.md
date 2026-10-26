@@ -148,8 +148,9 @@ docker compose -f deploy/vm/docker-compose.yml exec dashboard strands-robots doc
 - If a follower bus goes silent (no motors answer, USB adapter still present), the C300's USB-C port
   dropped 12 V. Toggle the station's USB outputs (this reboots the Pi too), then rerun Woodside's
   guarded stop and start the host.
-- The right leader's 5 V supply sags; its gripper (id 6) can flag "Input voltage error" on connect.
-  `teleop_xlerobot.py` retries the leader connect.
+- Both leaders run from 5 V / 3 A supplies (since 2026-10-26). Before that the right leader's
+  gripper (id 6) flagged "Input voltage error" on connect; `teleop_xlerobot.py` still retries the
+  leader connect as a safety net.
 - Agent-driven motion on real hardware goes through mesh `execute`/`start`. The robot refuses it unless
   the sender is attributable ("no publisher session id" under auth `none`), so it needs mesh mTLS, plus a
   policy (`scripts/nudge_policy.py` is a bounded one). `set_joints` is sim-only. `stop` works today.

@@ -211,7 +211,7 @@ done in `plan.md`, push.
 - Both XLeRobot clients define `connect(self)`, but Strands calls `robot.connect(False)`; every live
   teleop frame failed until the shim plugin accepted (and ignored) `calibrate`. The glide, which calls
   the client directly, did move the follower over WiFi (left pan 22.8 -> 3.4).
-- Right leader's 5 V supply still sags (gripper id 6 flags undervoltage on connect); the script retries the connect. A better 5 V/3 A adapter is the real fix.
+- Right leader's 5 V supply sagged (gripper id 6 flagged undervoltage on connect); the script retries the connect. Both leaders are on 5 V/3 A supplies as of 2026-10-26.
 - Follow-ups: a policy server for agent-driven motion, mTLS/ACL on the mesh, Tailscale, keyboard/gamepad base control, a pod-restart
   script that refreshes the tunnel's POD_HOST/POD_PORT.
 
@@ -363,13 +363,11 @@ Done when: a nudge served over the network moves the left arm a few degrees and 
 from the dashboard/mesh halts it, and the dry run shows three camera frames in the observation.
 Jacob at the robot for any motion; the host still needs `woodside-supervisor` stopped.
 
-**CP12. Record the dataset.** Prerequisites, both before the first episode: (a) the right leader
-runs from a proper 5 V / 3 A supply (Jacob, by hand; the sagging supply trips the gripper's
-undervoltage flag and would corrupt episodes); (b) the three robot cameras are visible live from
-the desktop so head angle and framing are fixed before recording. For (b) the agent first tries
-the dashboard's per-robot camera view against the `woodside` peer (frames come from the host
-through the client; `list_cameras` / `render`); if the dashboard cannot show them, a small
-`scripts/show_cameras.py` that renders the client's observation frames with OpenCV is enough.
+**CP12. Record the dataset.** Prerequisite: the three robot cameras are viewable live **in the
+dashboard** against the `woodside` peer (frames come from the host through the client;
+`list_cameras` / `render`), so head angle and framing are fixed before the first episode. The
+dashboard is the only acceptable viewer; if it cannot show the frames, fix the dashboard path
+(device profile, camera routes, peer camera publishing) rather than adding a separate viewer.
 Then `scripts/record_episodes.sh`: `lerobot-record
 --robot.type=xlerobot_2wheels_client --robot.remote_ip=<pi> --teleop.type=bi_so_leader ...
 --dataset.repo_id=Jacob-Brokloff/xlerobot_<task> --dataset.single_task="..."
@@ -451,7 +449,7 @@ fresh one with the same prompt.
 | 1 | CP8, CP9, CP10, plus the **files only** for CP11 (`deploy/pi/control/`, `scripts/pi_control.py`, `scripts/serve_nudge.py`) and CP13 (`deploy/runpod/`, `scripts/serve_policy.py`, `scripts/train_pi05.py`) | Do not touch the robot, the Pi's services, Tailscale or the pod. Mark CP11 and CP13 `files written` in the table, not `done`. |
 | 2 | CP7 | Jacob approves each Tailscale login URL you print; wait for him at each host. Never run `tailscale up` with a pre-auth key you invented. |
 | 3 | CP11 (run) | Jacob is at the robot with the e-stop. Before any command that moves the arm, say what it will do and wait for his yes. Stop `woodside-supervisor` and start `xlerobot-host` only after he confirms the arms are supported. |
-| 4 | CP12 | Do not record until Jacob confirms the right leader is on the 5 V / 3 A supply and he has seen all three cameras live. Jacob drives the leaders. Confirm the task text, episode count and head angle with him first; announce each episode start and stop. |
+| 4 | CP12 | Do not record until Jacob has seen all three robot cameras live in the dashboard. No other viewer counts. Jacob drives the leaders. Confirm the task text, episode count and head angle with him first; announce each episode start and stop. |
 | 5 | CP13 (run) | Give the pod cost estimate (hours x $/hr) and get a yes before training. Stop the pod when the block ends, even on failure. |
 | 6 | CP14, CP15 | Same gate as block 3, plus: confirm the pod is up and serving before the Pi loop is started. Stop the pod when the block ends. |
 
@@ -463,8 +461,9 @@ the machines first; nothing in block 1 depends on it.
 Dashboard teleop button and device profiles for `xlerobot_2wheels_client` / `bi_so_leader`
 (`routes_mesh.py`, `device_manager.py`): the script teleop records the dataset, so this is operator
 UI for later. Mesh mTLS: only needed for agent-issued `execute` over the mesh; the Pi loop runs the
-policy in-process and `stop` already works under auth none. The camera view and the right leader's
-5 V / 3 A supply moved into CP12 as prerequisites.
+policy in-process and `stop` already works under auth none. The dashboard camera view moved into
+CP12 as a prerequisite. Both leaders are on 5 V / 3 A supplies now (2026-10-26), so the adapter
+item is closed; the connect retry in `teleop_xlerobot.py` stays as a safety net.
 
 ## Hand-off notes for the next session
 
