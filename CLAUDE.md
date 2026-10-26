@@ -149,14 +149,14 @@ Agent motion check (needs mesh mTLS before the robot will accept it): `scripts/r
 with `STRANDS_ROBOT_COMMAND_ALLOW=execute STRANDS_MESH_POLICY_TYPE_ALLOW=nudge`, then `~/cp5_nudge.sh` on the VM
 (also needs `STRANDS_MESH_POLICY_TYPE_ALLOW=nudge`). `scripts/agent.py` prompts `Approve? [y/N]` for gated actions.
 
-Pi (the host needs both motor buses, which `woodside-supervisor` holds while it runs). Since CP11 the unit runs
-`~/robots/deploy/pi/xlerobot_host.py` with the cameras in `~/robots/deploy/pi/cameras.json`:
+Pi: `xlerobot-host` is the robot's only stack (enabled at boot, runs forever; Woodside retired 2026-10-26).
+The unit runs `~/robots/deploy/pi/xlerobot_host.py` with the cameras in `~/robots/deploy/pi/cameras.json`.
+Its (re)start reconfigures the motors with torque briefly off: support the arms first.
 
 ```bash
 ssh xlerobot 'bash ~/robots/deploy/pi/install.sh'   # installed already; rerun after editing the unit or cameras
-ssh xlerobot 'systemctl --user stop woodside-supervisor && systemctl --user start xlerobot-host'
-ssh xlerobot 'journalctl --user -u xlerobot-host -f'
-ssh xlerobot 'systemctl --user stop xlerobot-host && systemctl --user start woodside-supervisor'   # hand back
+ssh xlerobot 'systemctl --user restart xlerobot-host'
+ssh xlerobot 'systemctl --user status xlerobot-host -n 50'   # user journal is not persisted; status shows the log
 ```
 
 VM:
@@ -171,9 +171,10 @@ docker compose -f deploy/vm/docker-compose.yml exec dashboard strands-robots doc
 
 - The robot is the **2-wheel** build (`xlerobot_2wheels`, keys `x.vel`/`theta.vel`, no `y.vel`).
   Use `XLEROBOT_TYPE=xlerobot_2wheels_client`; `xlerobot_client` is the 3-omniwheel build.
-- The Pi also runs **Woodside LeLab** (`woodside-supervisor` user unit, `~/.local/share/woodside-lelab`),
-  a separate rate-limited teleop/safety stack using the same leaders, follower ports and
-  calibrations. It and `xlerobot-host` cannot run at the same time.
+- **Woodside LeLab is retired** (2026-10-26): `woodside-supervisor` is stopped and disabled, files left in
+  `~/.local/share/woodside-lelab`. Do not start it; it would fight `xlerobot-host` for both motor buses.
+- The plugin host exits after `connection_time_s` (default 3600 s), and that clean exit disables torque on
+  both arms; the unit passes 10 years so this never fires.
 - The 2-wheel host's `connect()` prompts on stdin to restore calibration (writes it to the motors);
   the unit answers Enter.
 - `lerobot_robot_xlerobot` registers `XLerobotClientConfig` but does not export `XLerobotClient`,
@@ -184,15 +185,15 @@ docker compose -f deploy/vm/docker-compose.yml exec dashboard strands-robots doc
   FAILs are the sim stack, which the POC does not install.
 - Mesh is off unless `mesh=True`; `teleop_xlerobot.py` turns it on (`--no-mesh` to skip).
 - If a follower bus goes silent (no motors answer, USB adapter still present), the C300's USB-C port
-  dropped 12 V. Toggle the station's USB outputs (this reboots the Pi too), then rerun Woodside's
-  guarded stop and start the host.
+  dropped 12 V. Toggle the station's USB outputs (this reboots the Pi too); the host starts at boot
+  (support the arms).
 - Both leaders run from 5 V / 3 A supplies (since 2026-10-26). Before that the right leader's
   gripper (id 6) flagged "Input voltage error" on connect; `teleop_xlerobot.py` still retries the
   leader connect as a safety net.
 - Agent-driven motion on real hardware goes through mesh `execute`/`start`. The robot refuses it unless
   the sender is attributable ("no publisher session id" under auth `none`), so it needs mesh mTLS, plus a
   policy (`scripts/nudge_policy.py` is a bounded one). `set_joints` is sim-only. `stop` works today.
-- Stopping `xlerobot-host` leaves the follower torque ON; Woodside then reports RECOVERY_REQUIRED.
+- `systemctl --user stop xlerobot-host` (SIGTERM) leaves the follower torque ON.
 - The image installs CPU torch (`UV_TORCH_BACKEND=cpu`); the desktop GPU is AMD and no policy runs here.
   The GPU is used only for MuJoCo's EGL rendering (mesa, `/dev/dri`).
 - At the pinned XLeRobot ref the 2-wheel plugin configures **no cameras** (`cameras={}`), and the client drops

@@ -361,7 +361,7 @@ unit, `After=xlerobot-host`, `EnvironmentFile=%h/strands-control.env`, not enabl
 motion: `scripts/serve_nudge.py` (`PolicyServer` around `scripts/nudge_policy.py`) on the VM.
 Done when: a nudge served over the network moves the left arm a few degrees and returns, `stop`
 from the dashboard/mesh halts it, and the dry run shows three camera frames in the observation.
-Jacob at the robot for any motion; the host still needs `woodside-supervisor` stopped.
+Jacob at the robot for any motion.
 
 **CP12. Record the dataset.** Prerequisite: the three robot cameras are viewable live **in the
 dashboard** against the `woodside` peer (frames come from the host through the client;
@@ -491,6 +491,14 @@ one-liners; mark the vLLM/Qwen rows retired; this status table.
   session that never announced this peer id (possible response forgery)`, so `/api/robots/woodside/stop` returns
   `no_answer` even though the robot stops. Same auth-`none` attribution gap as CP5; mesh mTLS closes it.
 - Stopping `woodside-supervisor` left it `failed`: its `ExecStop` (`maintenance release-inspection`) exited 1.
+- **Woodside retired** (Jacob, after the block): `woodside-supervisor` disabled, `xlerobot-host` enabled at boot.
+  The plugin host's default `connection_time_s=3600` made it exit hourly with `disable_torque_on_disconnect`, i.e.
+  the arms went limp every hour; the unit now passes 10 years. Restarted 07:17 with the arms supported.
+- **Dashboard visibility.** Nothing on the Pi is a mesh peer while no rollout runs (`pi_control.py` joins as
+  `woodside` only for its run), so both dashboards list zero peers. CP12's prerequisite is a persistent
+  `woodside` peer. Constraint: the host has one ZMQ PUSH for observations, which round-robins across connected
+  clients, so the dashboard peer and a separate `pi_control.py` cannot both be clients. One long-lived process
+  has to own the client and run policies too.
 - Process exit prints `terminate called without an active exception` (a native thread at teardown, after the
   result is printed); harmless so far.
 
