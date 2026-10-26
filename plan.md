@@ -226,27 +226,207 @@ done in `plan.md`, push.
 | Pi `xlerobot-host` | **stopped** | `ssh xlerobot 'systemctl --user stop woodside-supervisor && systemctl --user start xlerobot-host'` |
 | Pi `woodside-supervisor` | **running, RECOVERY_REQUIRED**: the host left the follower torque on; Woodside will not cut it on its own | Jacob supports the arms and clears recovery from the Woodside desktop app |
 
-## Next work (agreed direction)
+## Phase 2: VLA on RunPod, control loop on the Pi, sim in the container (planned 2026-10-26)
 
-1. **Dashboard teleop button for the XLeRobot.** Strands already has mesh teleop in the dashboard
-   (`strands_robots/dashboard/routes_mesh.py`: `/robots/{peer}/teleop/publish|receive|stop`) and a device
-   manager that spawns peers (`device_manager.py`, Devices panel). Missing: device profiles for
-   `xlerobot_2wheels_client` (follower) and `bi_so_leader` (leaders) so both can be spawned from the
-   Devices panel, then a one-click "teleop" that starts publish on the leader peer and receive on the
-   robot peer. The glide-in from `scripts/teleop_xlerobot.py` should carry over.
-2. **Robot cameras in the dashboard.** The XLeRobot's cameras are on the Pi; configure them in the host
-   (`XLerobot2WheelsConfig.cameras`) so observations carry frames, then surface them per robot. The
-   desktop dashboard container also needs `/dev/video*` for local USB cameras.
-3. **Mesh mTLS** (`STRANDS_MESH_AUTH_MODE=mtls` + certs) so agent `execute` is attributable and allowed;
-   then rerun the `nudge` check (`scripts/robot_peer.py`, `~/cp5_nudge.sh` on the VM).
-4. Right leader 5 V/3 A adapter; Tailscale; a policy server for real agent tasks.
+### Why
+
+The Qwen3/vLLM agent of CP5 was only the chat and tool-calling layer of a Strands Agent; it never
+produced motion, and Jacob does not want LLM-driven robots. Direction for phase 2:
+
+- Motion comes from a **VLA served on RunPod**. Nothing policy-related runs locally; the only local
+  compute in the loop is a **control loop on the Pi**. The Qwen/vLLM path is retired.
+- **Tailscale** on Pi, VM, desktop and pod. Replaces the SSH tunnel and carries the PolicyServer
+  WebSocket (plain ws by design) and Zenoh.
+- **MuJoCo sim in the desktop container**, viewed through the dashboard (Devices panel spawns a
+  registry robot, MJPEG stream at 12 fps; `strands_robots/dashboard/routes_sim.py`). The VM has
+  no GPU and stays the mesh hub.
+- **XLeRobot sim model**: upstream `simulation/mujoco/xlerobot.xml` first (3-omniwheel), then a
+  **2-wheel variant** matching the real robot.
+
+### Which VLA
+
+**pi0.5 first, SmolVLA as the fallback on the same dataset.** XLeRobot's docs cover ACT (single
+arm), SmolVLA (bimanual drawer and zipper tasks from ~20 episodes, three cameras) and pi0.5 (dual
+arm, run by a community member through an openpi fork; dataset `xuweiwu/bimanual-toy-box-cleanup`,
+no scores). Outside XLeRobot a HF team reports pi0.5 beating SmolVLA on SO-101 across four tasks
+with ~10x fewer training steps. The openpi fork is not needed: lerobot 0.6.1 ships `pi05`
+(`lerobot/pi05_base`), Strands `lerobot_local` handles pi0/pi0.5 (32-D action truncation, language
+tokens, RTC) and `TrainSpec` takes `policy_type="pi05"` with `method="lora"`. The Pi's lerobot
+already has the module. pi0.5 is 3B-class, so LoRA on the A40 (48 GB); if it does not fit, swap
+`base_model="lerobot/smolvla_base"`, `policy_type="smolvla"` in the same spec.
+
+### Facts verified 2026-10-26
+
+- Hardware `Robot.run_policy(policy_object)` / `start_task(policy_provider="ws://...")` run the
+  policy **inside the robot process**. No mesh sender attribution is involved, so the mTLS blocker
+  from CP5 does not apply to this path.
+- `RemotePolicy` (`strands-robots[inference]`, websockets only) dials `PolicyServer` on 8765 and
+  mirrors `requires_images`, chunking and RTC. The server binds 127.0.0.1 unless `host="0.0.0.0"`;
+  one client at a time; no TLS (tailnet).
+- The 2-wheel plugin's `XLerobot2WheelsConfig.cameras` defaults to RealSense + two USB cams, so the
+  host should already put frames in observations (verify). Pi 5, 8 GB, Python 3.13, torch 2.11 cpu
+  in `~/xlerobot-runtime`; plugin source at `~/xlerobot-source/software/plugins/`. `strands-robots`
+  needs Python >= 3.12.
+- Registry overlay `user_robots.json` merges over `robots.json`; non-Menagerie sim robots download
+  with `asset.source: {type: github, repo, subdir}` (`strands_robots/assets/download.py` ~L853).
+  Only `github` and `menagerie` sources exist, so the 2-wheel MJCF lives in this fork on GitHub and
+  is pulled the same way.
+- Embodiments: `create_policy(..., embodiment=<inline dict>)` works for a robot
+  `embodiments.json` does not know; no package edit.
+- Hardware robots do not implement `start_recording`; on hardware, recording is lerobot's own
+  `lerobot-record` (Strands wraps it as `lerobot_teleoperate(action="start", dataset_*=...)`).
+- XLeRobot `xlerobot.xml` joints: `Rotation_L/R, Pitch_L/R, Elbow_L/R, Wrist_Pitch_L/R,
+  Wrist_Roll_L/R, Jaw_L/R, head_pan_joint, head_tilt_joint`; base `slide_joint_x/y, hinge_joint_z`
+  plus three omni-wheel hinges; `scene.xml` includes it; meshes under `assets/`.
+- The sim is upstream code already in this fork (`strands_robots/simulation/mujoco/`); the image
+  just omits the `sim-mujoco` extra, which is why `doctor` shows MuJoCo FAILs in the container.
+
+### Target architecture
+
+```
+[RunPod pod, Tailscale]                     [Pi Woodside, Tailscale]
+  PolicyServer :8765                          xlerobot-host (as today, ZMQ 5555/5556 on loopback)
+  lerobot_local pi05 fine-tune   <--ws-->     xlerobot-control: Robot("xlerobot_2wheels_client",
+  (A40; training also here)                     remote_ip=127.0.0.1, mesh=True)
+                                                 + create_policy("ws://pod:8765") -> run_policy
+                                                         | zenoh 7447 (tailnet)
+[Desktop]                                    [VM strands-control]
+  leaders + robot-client (teleop, recording)   zenoh hub + dashboard (fleet view, e-stop)
+  dashboard + MuJoCo sim (container, EGL)
+```
+
+### Repo changes (fork only; upstream package untouched)
+
+```
+deploy/Dockerfile                 + sim-mujoco extra, mesa EGL libs
+deploy/desktop/docker-compose.yml + /dev/dri, MUJOCO_GL=egl on dashboard; new `sim` service for scripts/examples
+deploy/strands/user_robots.json   + "xlerobot" (upstream MJCF) and "xlerobot_2wheels" (fork MJCF) sim entries
+deploy/sim/xlerobot_2wheels/      2-wheel MJCF (xlerobot_2wheels.xml, scene.xml; meshes from the upstream download)
+deploy/pi/control/                install.sh (uv venv ~/strands-control), xlerobot-control.service, strands-control.env.example
+deploy/runpod/                    bootstrap.sh (uv venv, strands-robots[lerobot,inference] + lerobot[pi], tailscale userspace),
+                                  serve_policy.sh, train.sh
+scripts/pi_control.py             the Pi loop: client robot + remote policy + run_policy; --dry-run prints obs keys and frame shapes
+scripts/serve_nudge.py            PolicyServer around scripts/nudge_policy.py (first remote motion, served from the VM)
+scripts/serve_policy.py           PolicyServer(lerobot_local, inline embodiment) reading POLICY_* env
+scripts/train_pi05.py             TrainSpec wrapper (pi05 LoRA; smolvla fallback by env)
+scripts/record_episodes.sh        lerobot-record through xlerobot_2wheels_client + bi_so_leader
+CLAUDE.md                         tailnet table, port 8765, new services, pod bootstrap, one-liners
+```
+
+### Checkpoints (in order; update the status table as each lands)
+
+**CP7. Tailscale.** Install on Pi, VM, desktop (installed, logged out) and the pod (userspace:
+`tailscaled --tun=userspace-networking`, `tailscale up --ssh`). Each `tailscale up` needs Jacob to
+approve the login URL. Record tailnet names/IPs in CLAUDE.md. Disable `runpod-vllm-tunnel` on the VM
+(leave the unit file). Zenoh: VM listens as now; desktop and Pi `ZENOH_CONNECT=tcp/<vm-tailnet-ip>:7447`.
+Done when: `tailscale ping` works pairwise and the VM dashboard still lists the desktop peer.
+
+**CP8. Sim in the desktop container.** Dockerfile: add `sim-mujoco` to the extras and apt
+`libegl1 libgl1-mesa-dri libegl-mesa0`. Compose `dashboard`: `devices: /dev/dri`, `MUJOCO_GL=egl`,
+`group_add: [video, render]`. New compose service `sim` (same image, no serial devices) for
+`python examples/01_sim_hello_world.py` and `strands-robots doctor`. Image grows a few hundred MB.
+Done when: `doctor` passes the MuJoCo and GL rows in the container, and the dashboard Devices panel
+spawns `so101` and streams it.
+
+**CP9. XLeRobot upstream MJCF registered.** `user_robots.json` entry `xlerobot`: `category
+mobile_manip`, `asset: {dir: "xlerobot", model_xml: "xlerobot.xml", scene_xml: "scene.xml", source:
+{type: github, repo: Vector-Wangel/XLeRobot, subdir: simulation/mujoco}}` (pin the Dockerfile's ref
+if `_download_from_github` accepts one), `joint_labels` `Rotation_L -> left_arm_shoulder_pan`, ...,
+`Jaw_L -> left_arm_gripper`, `head_pan_joint -> head_motor_1`, `head_tilt_joint -> head_motor_2`,
+a `gripper` block for the two jaws, `spawn_position` z from the wheel radius.
+Done when: `Robot("xlerobot", mode="sim")` builds, `get_robot_state` lists the 14 arm/head joints
+with those labels, and the dashboard spawns and streams it.
+
+**CP10. 2-wheel sim variant.** `deploy/sim/xlerobot_2wheels/xlerobot_2wheels.xml`: the upstream model
+with the three omni wheels, `slide_joint_x/y` and the omni tendons removed; a free joint on the
+base, two drive wheels (`left_wheel`, `right_wheel` hinges with velocity actuators) and a caster;
+arms and head unchanged. Mesh references resolve to the STLs the CP9 download placed in the asset
+cache (decide symlink vs. path after reading how `dir`/`subdir` lay out on disk). Registered as
+`xlerobot_2wheels` with `source: {type: github, repo: Jacob-Brokloff/robots, subdir:
+deploy/sim/xlerobot_2wheels}` and `hardware.lerobot_type: xlerobot_2wheels_client`, so sim and
+real share one name and joint labels; `x.vel`/`theta.vel` map onto wheel velocities using the
+plugin's wheel radius and track.
+Done when: it builds, drives forward and turns under a mock base command, and the embodiment
+used in CP14 resolves identically in sim and real.
+
+**CP11. Pi control loop with a bounded policy.** `deploy/pi/control/install.sh`: `uv venv
+~/strands-control` (Python 3.13), the fork from a clone at `~/robots` with
+`.[lerobot,mesh,inference]`, `deploy/xlerobot_client`, the two XLeRobot plugins from
+`~/xlerobot-source` (`--no-deps`, as `deploy/pi/install.sh` does), `pyzmq`, CPU torch.
+`scripts/pi_control.py`: `Robot("xlerobot_2wheels_client", mode="real", remote_ip="127.0.0.1",
+mesh=True, peer_id="woodside")`, policy from `POLICY_ENDPOINT` (`ws://...`), `--instruction`,
+`--duration` (default 10 s), `--dry-run` (connect, print observation keys and camera frame shapes,
+exit), logs `avg_inference_ms`, stops on SIGTERM via `stop_task`. `xlerobot-control.service`: user
+unit, `After=xlerobot-host`, `EnvironmentFile=%h/strands-control.env`, not enabled. First remote
+motion: `scripts/serve_nudge.py` (`PolicyServer` around `scripts/nudge_policy.py`) on the VM.
+Done when: a nudge served over the network moves the left arm a few degrees and returns, `stop`
+from the dashboard/mesh halts it, and the dry run shows three camera frames in the observation.
+Jacob at the robot for any motion; the host still needs `woodside-supervisor` stopped.
+
+**CP12. Record the dataset.** `scripts/record_episodes.sh`: `lerobot-record
+--robot.type=xlerobot_2wheels_client --robot.remote_ip=<pi> --teleop.type=bi_so_leader ...
+--dataset.repo_id=Jacob-Brokloff/xlerobot_<task> --dataset.single_task="..."
+--dataset.num_episodes=50 --dataset.fps=30` from the desktop container (frames come from the
+host). Fixed head angle and lighting (XLeRobot's docs stress both). `HF_TOKEN` in `deploy/.env`;
+push to the Hub. One bimanual table task first. `verify_dataset`.
+Done when: 50 episodes, 3 cameras, 12-D or 14-D state/action on the Hub.
+
+**CP13. Train pi0.5 on RunPod.** `deploy/runpod/bootstrap.sh` on a pod with a network volume (the
+old pod lost its install when stopped). `scripts/train_pi05.py`: `TrainSpec(dataset_repo_id=...,
+base_model="lerobot/pi05_base", method="lora", lora_r=16, steps=10_000, global_batch_size sized to
+48 GB, val_episodes=2, extra={"policy_type": "pi05"})`, `create_trainer("lerobot_local")`.
+`validate()` needs `q01..q99` stats for pi05; compute them first if the recorder did not. Push the
+checkpoint to the Hub. Fallback: SmolVLA, same spec.
+Done when: the checkpoint loads through `create_policy("lerobot_local", ...)` on the pod and
+`get_actions` returns a chunk on a recorded observation.
+
+**CP14. Serve and run.** `scripts/serve_policy.py`: `PolicyServer(policy_provider="lerobot_local",
+policy_config={"pretrained_name_or_path": ..., "embodiment": <inline dict: state/action keys in
+plugin order, degrees, gripper indices, obs_rename head/left/right -> the checkpoint's image
+features>}, host=<tailnet ip>, port=8765)`. Pi `xlerobot-control` points at it, `duration`
+bounded, Jacob at the robot with Woodside's e-stop and the dashboard fleet stop. Measure
+`avg_inference_ms` over the internet and size `control_frequency` (pi0.5 chunks absorb ~300 ms).
+Done when: the robot performs the recorded task from the pi0.5 checkpoint with the policy only on
+RunPod and the loop only on the Pi. Record success over 10 trials here.
+
+**CP15. Docs.** CLAUDE.md: tailnet table, 8765, new services, pod bootstrap, train/serve
+one-liners; mark the vLLM/Qwen rows retired; this status table.
+
+### Phase 2 status
+
+| Checkpoint | Status | Notes |
+|---|---|---|
+| CP7 Tailscale | planned | |
+| CP8 Sim in the desktop container | planned | |
+| CP9 XLeRobot upstream MJCF | planned | |
+| CP10 2-wheel sim variant | planned | |
+| CP11 Pi control loop + nudge | planned | |
+| CP12 Dataset | planned | |
+| CP13 Train pi0.5 | planned | |
+| CP14 Serve and run | planned | |
+| CP15 Docs | planned | |
+
+### Risks
+
+- pi0.5 LoRA on one A40 should fit at small batch in bf16; otherwise SmolVLA.
+- Internet round trip pod to Pi; chunked policies absorb it, a WiFi hiccup stalls a chunk. `duration`
+  and the host's 500 ms watchdog bound the damage.
+- Pod bills $0.60/hr running; a network volume is ~$0.07/GB/month. Stop the pod when idle.
+- `xlerobot-host` still conflicts with Woodside. No `BYPASS_TOOL_CONSENT` is needed on this path.
+
+### Parked from phase 1
+
+Dashboard teleop button and device profiles for `xlerobot_2wheels_client` / `bi_so_leader`
+(`routes_mesh.py`, `device_manager.py`); robot cameras surfaced in the dashboard; mesh mTLS
+(only needed for agent-issued `execute`, not for the Pi loop); right leader 5 V/3 A adapter.
 
 ## Hand-off notes for the next session
 
 - Working directory: `/home/jacob-jbit/Documents/jacere-robotics/Strands_Fork` (git repo, `main`).
 - Image: `docker compose -f deploy/desktop/docker-compose.yml build` -> `strands-xlerobot:latest` (~7 GB, CPU torch).
 - `deploy/.env` exists on the desktop and the VM (gitignored); the VM's holds the dashboard token.
-- POC complete; see "State at hand-off" above for what is running.
+- POC complete; see "State at hand-off" above for what is running. Phase 2 (VLA on RunPod, Pi
+  control loop, sim) is planned above and not started; begin at CP7/CP8.
 - C300 gotcha: if a bus goes silent, toggle the station's USB outputs (this also reboots the Pi) and re-run Woodside's guarded `maintenance stop` before starting the host.
 - The RunPod pod bills $0.60/hr while running; stop it in the console when idle.
 - Update the status table above and `CLAUDE.md` as each checkpoint lands. Keep this file as the single hand-off doc.
