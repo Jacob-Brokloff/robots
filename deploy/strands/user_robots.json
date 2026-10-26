@@ -19,6 +19,48 @@
       "aliases": [
         "xlerobot_remote"
       ]
+    },
+    "xlerobot": {
+      "description": "XLeRobot sim, upstream 3-omniwheel MJCF (Vector-Wangel/XLeRobot simulation/mujoco)",
+      "category": "mobile_manip",
+      "joints": 17,
+      "joint_labels": {
+        "Rotation_L": "left_arm_shoulder_pan",
+        "Pitch_L": "left_arm_shoulder_lift",
+        "Elbow_L": "left_arm_elbow_flex",
+        "Wrist_Pitch_L": "left_arm_wrist_flex",
+        "Wrist_Roll_L": "left_arm_wrist_roll",
+        "Jaw_L": "left_arm_gripper",
+        "Rotation_R": "right_arm_shoulder_pan",
+        "Pitch_R": "right_arm_shoulder_lift",
+        "Elbow_R": "right_arm_elbow_flex",
+        "Wrist_Pitch_R": "right_arm_wrist_flex",
+        "Wrist_Roll_R": "right_arm_wrist_roll",
+        "Jaw_R": "right_arm_gripper",
+        "head_pan_joint": "head_motor_1",
+        "head_tilt_joint": "head_motor_2"
+      },
+      "gripper": {
+        "actuators": [
+          "Jaw_L",
+          "Jaw_R"
+        ],
+        "closed": "low",
+        "open": "high"
+      },
+      "asset": {
+        "dir": "xlerobot",
+        "model_xml": "xlerobot.xml",
+        "scene_xml": "scene.xml",
+        "source": {
+          "type": "github",
+          "repo": "Vector-Wangel/XLeRobot",
+          "subdir": "simulation/mujoco"
+        }
+      },
+      "hardware": {
+        "lerobot_type": "xlerobot_client"
+      }
     }
   }
 }
