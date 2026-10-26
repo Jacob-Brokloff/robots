@@ -438,11 +438,16 @@ one-liners; mark the vLLM/Qwen rows retired; this status table.
 
 ### Block 2 notes (2026-10-26)
 
-- **Pod storage.** The CP7 pod had no network volume, so stopping it wiped `/workspace` (its tailscale state
-  included). Network volume `strands-xlerobot` (`tfjehy3k9s`, US-MO-1, 60 GB standard, $4.20/mo) now exists for
-  block 5: deploy a Secure Cloud pod on it, 1x A40 if one is free, else 1x L40S (both 48 GB). Venv, HF cache,
-  dataset, checkpoints and `/workspace/tailscale` then survive stops. Delete the stale `strands-pod` node in the
-  Tailscale admin console before its first login, so the name stays `strands-pod`. SSH address changes per pod.
+- **Pod storage and login.** The CP7 pod had no network volume, so stopping it wiped `/workspace`. Network
+  volume `strands-xlerobot` (`tfjehy3k9s`, US-MO-1, 60 GB standard, $4.20/mo) now holds `/workspace/tailscale`:
+  logged in once from a throwaway CPU pod (`strands-ts-login`, $0.08/hr, terminated), key expiry disabled in the
+  admin console, and a kill/restart of `tailscaled` from the saved state rejoined as `strands-pod` 100.85.254.112
+  with no login. Block 5: deploy a Secure Cloud pod on the volume, 1x A40 if free, else 1x L40S (both 48 GB), and
+  run `bootstrap.sh`. Pods on a volume can be stopped or terminated; terminate when done, everything lives on the
+  volume. The pod takes the desktop's SSH key, not the VM's.
+- **DERP from US-MO-1.** The CPU pod got no direct path: every host reached it via `DERP(dfw)` at ~42 ms (the CA-MTL-1
+  pod was direct at ~30 ms). Fine for a chunked policy, but check `tailscale ping` from the Pi on the block 5/6 GPU
+  pod; relayed traffic is throughput-limited, which matters for camera frames on the WebSocket.
 - **Why US-MO-1.** A volume pins pods to its datacenter, so the datacenter has to carry several 48 GB+ types (the
   old pod died on exactly this). US-IL-1 is closer to Ohio but had no 48 GB GPU free; CA-MTL-1 has A40s but only
   high-performance storage ($0.14/GB). US-MO-1 lists L40S, H100 SXM, A40 and A100. Latency is not the deciding
