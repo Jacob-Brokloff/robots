@@ -1,8 +1,8 @@
 # CLAUDE.md - Jacere fork of strands-labs/robots
 
 Personal fork for the wireless XLeRobot teleop POC. Upstream package code is untouched; the fork
-adds `deploy/`, `scripts/teleop_xlerobot.py`, `scripts/agent.py`, this file and `plan.md` (the
-hand-off doc with checkpoint status). Upstream conventions live in `AGENTS.md`.
+adds `deploy/`, `scripts/teleop_xlerobot.py`, `scripts/agent.py`, the phase 2 scripts below, this file
+and `plan.md` (the hand-off doc with checkpoint status). Upstream conventions live in `AGENTS.md`.
 
 Git: `origin` = https://github.com/Jacob-Brokloff/robots, `upstream` = https://github.com/strands-labs/robots,
 branch `main`.
@@ -33,6 +33,7 @@ systemd service (`ssh -L 127.0.0.1:8000:127.0.0.1:8000`); after a pod restart, u
 | 8090 | Strands dashboard (`strands-robots dashboard`, `DASHBOARD_AUTH_TOKEN` in VM `deploy/.env`) | VM (LAN) |
 | 8090 | Strands dashboard, loopback only, passkey login: **http://localhost:8090** | desktop (`deploy/desktop` service `dashboard`) |
 | 8000 | vLLM OpenAI API, via SSH tunnel | VM `127.0.0.1` only |
+| 8765 | PolicyServer (WebSocket, no TLS; phase 2, not running yet) | VM (`serve_nudge.py`) / pod `127.0.0.1` behind userspace Tailscale (`serve_policy.sh`) |
 
 ## Serial devices (desktop)
 
@@ -98,6 +99,25 @@ docker compose -f deploy/desktop/docker-compose.yml run --rm -e BYPASS_TOOL_CONS
 # glides 3 s from the robot's pose to the leaders', then follows live; --glide 0 to skip
 ```
 
+Sim (CP8-CP10; `sim` service = same image, `/dev/dri` + `MUJOCO_GL=egl`, no serial devices):
+
+```bash
+docker compose -f deploy/desktop/docker-compose.yml run --rm sim strands-robots doctor
+docker compose -f deploy/desktop/docker-compose.yml run --rm sim python examples/01_sim_hello_world.py
+docker compose -f deploy/desktop/docker-compose.yml run --rm sim python scripts/xlerobot_2wheels_sim.py   # drive check
+docker compose -f deploy/desktop/docker-compose.yml run --rm sim python scripts/xlerobot_embodiment.py    # sim/real keys
+python scripts/make_xlerobot_2wheels_mjcf.py <XLeRobot>/simulation/mujoco deploy/sim/xlerobot_2wheels    # regenerate MJCF
+```
+
+Sim robots in `user_robots.json`: `xlerobot` (upstream 3-omniwheel MJCF, from GitHub) and `xlerobot_2wheels`
+(fork MJCF from `deploy/sim/xlerobot_2wheels` on GitHub; reads `xlerobot`'s meshes, so `xlerobot` must be
+downloaded first). Assets cache in `deploy/strands/assets/` (root-owned). Both spawn from the dashboard.
+
+Phase 2 files written, not yet run: Pi loop `deploy/pi/control/` (`install.sh`, `xlerobot-control.service`
+user unit, never enabled, `~/strands-control.env`) + `scripts/pi_control.py [--dry-run]`;
+`scripts/serve_nudge.py` (VM, first remote motion); pod `deploy/runpod/{bootstrap,train,serve_policy}.sh`
++ `scripts/train_pi05.py` / `scripts/serve_policy.py`; shared embodiment `scripts/xlerobot_embodiment.py`.
+
 Desktop dashboard (always on; passkey store persisted in `deploy/strands/dashboard-auth/`):
 
 ```bash
@@ -156,3 +176,9 @@ docker compose -f deploy/vm/docker-compose.yml exec dashboard strands-robots doc
   policy (`scripts/nudge_policy.py` is a bounded one). `set_joints` is sim-only. `stop` works today.
 - Stopping `xlerobot-host` leaves the follower torque ON; Woodside then reports RECOVERY_REQUIRED.
 - The image installs CPU torch (`UV_TORCH_BACKEND=cpu`); the desktop GPU is AMD and no policy runs here.
+  The GPU is used only for MuJoCo's EGL rendering (mesa, `/dev/dri`).
+- At the pinned XLeRobot ref the 2-wheel plugin configures **no cameras** (`cameras={}`), and the client drops
+  frames whose names are not in its own `config.cameras`; host and client both need the camera config.
+- The dashboard at :8090 is passkey-only. To script `/api/sim`, run a second one in the `sim` service with
+  `-e DASHBOARD_AUTH_TOKEN=<random> ... strands-robots dashboard --host 127.0.0.1 --port 8091` and send
+  `Authorization: Bearer <token>`; remove it afterwards.
