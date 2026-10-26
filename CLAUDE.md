@@ -15,7 +15,8 @@ branch `main`.
 | XLeRobot Pi `Woodside` | 192.168.1.114 (WiFi), `ssh xlerobot` (user `woodside`, key in `~/.ssh/config`) | `xlerobot-host` systemd *user* unit (`deploy/pi/`); Debian 13, Python 3.13 |
 | Proxmox host `pve` | https://192.168.1.78:8006 | VMs 100 claude-agent, 101 codex-agent, **102 strands-control** |
 | VM `strands-control` (102) | 192.168.1.82 (DHCP), `ssh jbit@192.168.1.82` (desktop key) | Zenoh hub, dashboard, agent (`deploy/vm/`), clone at `~/robots`; Debian 13, 4 vCPU / 8 GB / 40 GB on truenas-nfs |
-| RunPod pod `strands-vllm-migration` | id `2696djui2bkomf`, SSH `root@69.30.85.29 -p 22140` (VM key only; changes on restart) | 1x A40, $0.60/hr, **no network volume** (stop wipes it). Old pod `strands-vllm` (`vo7awa4r5uk3x1`) stopped, its GPU host gone |
+| RunPod network volume `strands-xlerobot` | id `tfjehy3k9s`, **US-MO-1**, 60 GB standard ($4.20/mo), mounts at `/workspace`; S3 `s3://tfjehy3k9s` via `https://s3api-us-mo-1.runpod.io` | Deploy the next pod **on this volume** (Secure Cloud, US-MO-1): 1x A40 ($0.59/hr) if free, else 1x L40S ($1.09/hr); both 48 GB. Not created yet (block 5) |
+| Stopped pods (no volume) | `strands-vllm-migration` `2696djui2bkomf` (CA-MTL-1, empty) and `strands-vllm` `vo7awa4r5uk3x1` (GPU host gone) | Both $0.00/hr; delete in the console when convenient |
 
 ## Tailnet (CP7, tailnet `jacob-brokloff.github`, MagicDNS `*.tail22e67e.ts.net`)
 
@@ -24,7 +25,7 @@ branch `main`.
 | `arch-desktop` | 100.92.165.27 | desktop | operator `jacob-jbit`, so `tailscale` needs no sudo |
 | `strands-control` | 100.70.150.7 | VM | apt `tailscale`, `tailscaled` enabled |
 | `woodside` | 100.89.113.110 | Pi | apt `tailscale`, `tailscaled` enabled |
-| `strands-pod` | 100.72.227.119 | pod | userspace `tailscaled` from `/workspace/tailscale` (`deploy/runpod/bootstrap.sh`), `--ssh`; lost on pod stop, so re-run bootstrap and approve a new login |
+| `strands-pod` | 100.72.227.119 (stale) | pod | userspace `tailscaled` from `/workspace/tailscale` (`deploy/runpod/bootstrap.sh`), `--ssh`. This node was on the volume-less CP7 pod and is gone; delete it in the admin console, then log in once from the pod on `strands-xlerobot` (its state then lives on the volume and survives stops) |
 
 The Qwen/vLLM path is retired: `runpod-vllm-tunnel` on the VM is disabled (unit file kept) and the new pod
 has no vLLM. Pod tailscale CLI: `/workspace/tailscale/tailscale --socket=/workspace/tailscale/tailscaled.sock`.

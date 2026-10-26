@@ -438,11 +438,19 @@ one-liners; mark the vLLM/Qwen rows retired; this status table.
 
 ### Block 2 notes (2026-10-26)
 
-- **Pod has no network volume.** Stopping it wipes `/workspace`, including `/workspace/tailscale`. Each start needs
-  `bootstrap.sh` again and a new login approval, and leaves a stale `strands-pod` node (the next one may be named
-  `strands-pod-1`; delete the old node in the Tailscale admin console first). Before block 5, create a network
-  volume (~$0.07/GB/month) and deploy the pod on it, or the trained checkpoint must reach the Hub before any stop.
-  Its SSH address also changes when RunPod moves it.
+- **Pod storage.** The CP7 pod had no network volume, so stopping it wiped `/workspace` (its tailscale state
+  included). Network volume `strands-xlerobot` (`tfjehy3k9s`, US-MO-1, 60 GB standard, $4.20/mo) now exists for
+  block 5: deploy a Secure Cloud pod on it, 1x A40 if one is free, else 1x L40S (both 48 GB). Venv, HF cache,
+  dataset, checkpoints and `/workspace/tailscale` then survive stops. Delete the stale `strands-pod` node in the
+  Tailscale admin console before its first login, so the name stays `strands-pod`. SSH address changes per pod.
+- **Why US-MO-1.** A volume pins pods to its datacenter, so the datacenter has to carry several 48 GB+ types (the
+  old pod died on exactly this). US-IL-1 is closer to Ohio but had no 48 GB GPU free; CA-MTL-1 has A40s but only
+  high-performance storage ($0.14/GB). US-MO-1 lists L40S, H100 SXM, A40 and A100. Latency is not the deciding
+  factor: ~30 ms tailnet RTT to Montreal, well inside a pi0.5 chunk.
+- **Serverless considered, not used.** RunPod Serverless does not fit the PolicyServer link: one long-lived
+  WebSocket per rollout, while load-balancing endpoints (beta) cap a request at 5.5 min and do not document
+  WebSockets; workers cold-start the 3B model and are ephemeral, so each would need a Tailscale pre-auth key; an
+  always-on A40 worker costs ~$0.86/hr (active) vs $0.59/hr for a pod. Training is hours long, so it is a pod job.
 - **Pi Zenoh.** Nothing on the Pi dials Zenoh yet; `deploy/pi/control/strands-control.env.example` now has
   `ZENOH_CONNECT=tcp/100.70.150.7:7447` (IP, not MagicDNS) for the block 3 install.
 - Pod-to-Pi latency is ~30 ms tailnet RTT (direct UDP, no DERP), well inside a pi0.5 chunk.
