@@ -14,11 +14,12 @@ function pageBackground(): string {
  * sees the spot without hunting for it in a full screen. The widget itself is left out. Known gap: on a
  * page scrolled down, fixed bars (the agent dock) render where they would sit on the unscrolled page,
  * so they can fall outside the crop. Capped near 2 MB in total so the upload stays small: a big screen
- * at high density is retried at a lower scale.
+ * at high density is retried at a lower scale, and if the pair never fits the full shot goes alone.
  */
 export async function captureViewport(widgetRoot: Element, box: Box | null): Promise<{ full: string; closeup: string }> {
   const vw = window.innerWidth
   const vh = window.innerHeight
+  let alone: { full: string; closeup: string } | null = null
   for (const scale of [Math.min(window.devicePixelRatio || 1, 1.5), 1, 0.6]) {
     const page = await domToCanvas(document.body, {
       scale,
@@ -44,7 +45,9 @@ export async function captureViewport(widgetRoot: Element, box: Box | null): Pro
     const full = out.toDataURL('image/jpeg', 0.82)
     const closeup = box ? closeupOf(out, box, scale) : ''
     if (full.length + closeup.length < 2_000_000) return { full, closeup }
+    if (!alone && full.length < 2_000_000) alone = { full, closeup: '' }
   }
+  if (alone) return alone
   throw new Error('the screenshot is too large to send')
 }
 

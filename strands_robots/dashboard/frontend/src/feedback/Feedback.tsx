@@ -100,7 +100,7 @@ export default function Feedback({ root }: { root: Element }) {
     setError(''); setMode('sending')
     storeName(name.trim())
     try {
-      const shots = pointed || shot ? await captureViewport(root, pointed ? box : null) : { full: '', closeup: '' }
+      const shots = shot ? await captureViewport(root, pointed ? box : null) : { full: '', closeup: '' }
       const el = pointed ? target.current : null
       const res = await fetch(ENDPOINT, {
         method: 'POST',
@@ -152,11 +152,9 @@ export default function Feedback({ root }: { root: Element }) {
       {/* Honeypot: hidden from people, filled in by form-spamming bots. */}
       <input className="fb-hp" tabIndex={-1} autoComplete="off" aria-hidden="true" name="website"
         value={hp} onChange={e => setHp(e.target.value)} />
-      {mode === 'note' && (
-        <label className="fb-check">
-          <input type="checkbox" checked={shot} onChange={e => setShot(e.target.checked)} /> Include a screenshot
-        </label>
-      )}
+      <label className="fb-check">
+        <input type="checkbox" checked={shot} onChange={e => setShot(e.target.checked)} /> Include a screenshot
+      </label>
       {error && <p className="fb-error" role="alert">{error}</p>}
       <div className="fb-row">
         <button type="button" className="fb-btn" onClick={reset}>Cancel</button>
@@ -175,7 +173,7 @@ export default function Feedback({ root }: { root: Element }) {
           <div className="fb-hint">
             Click what should change, or drag a box around it. Esc cancels.
             {/* Its own pointer handlers stop here, so pressing it does not start a box. */}
-            <button type="button" className="fb-link" onPointerDown={e => e.stopPropagation()}
+            <button type="button" className="fb-link" autoFocus onPointerDown={e => e.stopPropagation()}
               onPointerUp={e => e.stopPropagation()} onClick={() => { setHover(null); setMode('note') }}>
               General note instead
             </button>
