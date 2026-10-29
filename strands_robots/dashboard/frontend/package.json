@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:preview": "tsc -b && node scripts/build-preview.mjs",
     "preview": "vite preview",
     "gen:routes": "node scripts/gen-bundle-routes.mjs"
   },
