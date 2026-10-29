@@ -3634,9 +3634,7 @@ class Mesh(SensorLoopsMixin):
                 if teleop_robot_name is not None:
                     apply_fn = _real_to_sim_apply(teleop_robot_name)
                     return dict(
-                        teleop_host.start_teleop_receive(
-                            source, dev, robot_name=teleop_robot_name, apply_fn=apply_fn
-                        )
+                        teleop_host.start_teleop_receive(source, dev, robot_name=teleop_robot_name, apply_fn=apply_fn)
                     )
                 return dict(teleop_host.start_teleop_receive(source, dev))
             return {"error": "robot does not support teleop_receive"}
@@ -3652,7 +3650,10 @@ class Mesh(SensorLoopsMixin):
                     rcv = receivers.pop(key)
                     rcv.stop()
                     stopped[key] = rcv.stats
-                return {"status": "success", "content": [{"text": f"stopped {len(stopped)} receiver(s)"}, {"json": {"stopped": stopped}}]}
+                return {
+                    "status": "success",
+                    "content": [{"text": f"stopped {len(stopped)} receiver(s)"}, {"json": {"stopped": stopped}}],
+                }
             return {"error": "robot does not support stop_teleop"}
         return {"error": f"unknown action: {action}"}
 
