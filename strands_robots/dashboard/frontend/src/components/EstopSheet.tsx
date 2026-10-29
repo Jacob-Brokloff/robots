@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { estopNothingTargeted, signedRailClaim } from '../lib/estopReach'
 import type { EstopResult } from '../types'
 import { post, HttpError } from '../lib/endpoints'
 import { estopFailureVerdict, resumeFailureVerdict, type FailureVerdict } from '../lib/estopOutcome'
+import { useDialogFocus } from '../lib/useDialogFocus'
 
 /** The dashboard's own lockout (routes_sim.py: /api/safety). */
 export interface SimLockout { state: 'clear' | 'locked' | 'unknown' | string; reason?: string; by?: string; since?: number }
@@ -42,6 +43,10 @@ export default function EstopSheet({
   // The sim-only rail's answer, when that is the rail in use.
   const [simLockout, setSimLockout] = useState<SimLockout | null>(null)
   const paths = estopPaths(meshBacked)
+  // The `.` hotkey opens this sheet from anywhere: without this, focus stays on
+  // whatever was behind it, so Enter or Space acts on the page underneath.
+  const sheetRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(sheetRef, open)
 
   const resume = async () => {
     if (meshBacked && !code.trim()) return
@@ -95,8 +100,9 @@ export default function EstopSheet({
 
   return (
     <div className="sheet-backdrop" onClick={result && unconfirmed > 0 ? undefined : onClose}>
-      <div className={`sheet estop-sheet${unconfirmed > 0 ? ' danger' : ''}`} onClick={e => e.stopPropagation()}>
-        <h2>🛑 Stop everything</h2>
+      <div ref={sheetRef} className={`sheet estop-sheet${unconfirmed > 0 ? ' danger' : ''}`} onClick={e => e.stopPropagation()}
+           role="dialog" aria-modal="true" aria-labelledby="estop-sheet-title">
+        <h2 id="estop-sheet-title">🛑 Stop everything</h2>
 
         {!result && !error && (
           <>

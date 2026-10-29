@@ -8101,7 +8101,7 @@ function SettingsDrawer({ open, onClose, mesh, initialTab }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: 'What "wire security off" means:' }),
           " robot commands and camera frames travel the mesh unencrypted and unauthenticated (",
           /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_LOCAL_DEV=1" }),
-          "). That is fine on a trusted home LAN. Before this network is shared or bridged, restart the dashboard ",
+          "). That is a one-machine setting: the mesh refuses to start with it once an endpoint or multicast reaches another machine. Before robots on other machines join, restart the dashboard ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("em", { children: "without" }),
           " that env var so the mesh requires mTLS — then only ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "tls/" }),
@@ -10834,6 +10834,8 @@ function EstopSheet({
   const [resumeMsg, setResumeMsg] = reactExports.useState(null);
   const [simLockout, setSimLockout] = reactExports.useState(null);
   const paths = estopPaths(meshBacked);
+  const sheetRef = reactExports.useRef(null);
+  useDialogFocus(sheetRef, open);
   const resume = async () => {
     if (meshBacked && !code.trim()) return;
     setResuming(true);
@@ -10878,125 +10880,136 @@ function EstopSheet({
   if (!open) return null;
   const simOnly = (result == null ? void 0 : result.targeted.length) === 0 && !meshBacked;
   const unconfirmed = result ? result.counts.not_stopped + result.counts.no_answer : 0;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sheet-backdrop", onClick: result && unconfirmed > 0 ? void 0 : onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `sheet estop-sheet${unconfirmed > 0 ? " danger" : ""}`, onClick: (e) => e.stopPropagation(), children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "🛑 Stop everything" }),
-    !result && !error && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: meshBacked ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        "Sends ",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: '{action: "stop"}' }),
-        " to every peer with a live heartbeat and reports what each one answered."
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: "Freezes every simulated robot this dashboard is running and latches its lockout; no mesh bridge is online, so no fleet peer is reached from here." }) }),
-      meshBacked && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint", children: [
-        "Fires BOTH rails: per-peer stop commands (answered individually below) and the signed ",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "strands/safety/estop" }),
-        " envelope, which engages a fleet-wide LOCKOUT - every listening peer refuses further commands until a resume signed with the operator's key. A peer that is wedged or fully off the mesh still needs the hardware e-stop. The simulated robots of this dashboard are frozen too."
-      ] }),
-      linkWarning && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint warn", children: [
-        "⚠ ",
-        linkWarning,
-        " Pressing STOP ALL is still worth it — it is sent the moment the link returns — but do not wait for it: the arms’ power switch is the only brake that does not go through this page."
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint", children: [
-        "tip: ",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("kbd", { children: "." }),
-        " opens this sheet from anywhere — it works even when a drawer or dialog is covering the button."
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sheet-actions", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn danger big", onClick: fire, disabled: firing, children: firing ? "stopping…" : "STOP ALL ROBOTS" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn ghost", onClick: onClose, disabled: firing, children: "cancel" })
-      ] })
-    ] }),
-    error && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "result bad", role: "alert", children: error.headline }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "hint warn", children: error.advice }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sheet-actions", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn danger", onClick: fire, children: error.retryRepeats ? "send the stop again" : "retry" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn ghost", onClick: onClose, children: "close" })
-      ] })
-    ] }),
-    result && simOnly && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: (simLockout == null ? void 0 : simLockout.state) === "locked" ? "result ok" : "result bad", role: "status", children: (simLockout == null ? void 0 : simLockout.state) === "locked" ? `✓ sim lockout engaged${simLockout.by ? ` by ${simLockout.by}` : ""} - every simulated robot is frozen` : `lockout ${(simLockout == null ? void 0 : simLockout.state) ?? "unknown"}: ${(simLockout == null ? void 0 : simLockout.reason) ?? ""}` }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "hint", children: "Nothing outside this process was reached: the mesh bridge is offline, so a real arm on the desk still needs its power switch." }),
-      (simLockout == null ? void 0 : simLockout.state) === "locked" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "resume-box", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "resume-row", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn go", onClick: resume, disabled: resuming, children: resuming ? "…" : "resume simulation" }) }),
-        resumeMsg && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hint", children: resumeMsg })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sheet-actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn ghost", onClick: onClose, children: "close" }) })
-    ] }),
-    result && !simOnly && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "div",
-        {
-          className: result.all_stopped ? "result ok" : "result bad",
-          role: result.all_stopped ? "status" : "alert",
-          children: result.all_stopped ? `✓ all ${result.counts.stopped} live peer(s) confirmed stopped` : `⚠ ${unconfirmed} of ${result.targeted.length} peer(s) NOT confirmed stopped`
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "estop-list", children: Object.entries(result.stopped).map(([peer, info]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: info.state, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: peer }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: info.state === "stopped" ? "stopped" : info.state === "no_answer" ? "no answer — may still be moving" : `refused: ${typeof info.detail === "string" ? info.detail : JSON.stringify(info.detail)}` })
-      ] }, peer)) }),
-      result.stale_skipped.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint", children: [
-        "skipped (no heartbeat, cannot be reached): ",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: result.stale_skipped.join(", ") })
-      ] }),
-      result.targeted.length === 0 && (() => {
-        const reach = estopNothingTargeted({ staleSkipped: result.stale_skipped });
-        return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "result bad", role: "alert", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: reach.headline }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: reach.detail })
-        ] });
-      })(),
-      result.lockout_engaged && (() => {
-        var _a, _b, _c;
-        const claim = signedRailClaim({
-          lockoutEngaged: result.lockout_engaged,
-          issuer: (_a = result.signed_rail) == null ? void 0 : _a.issuer,
-          responsesReceived: (_b = result.signed_rail) == null ? void 0 : _b.responses_received,
-          peersNotStopped: (_c = result.signed_rail) == null ? void 0 : _c.peers_not_stopped
-        });
-        return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "resume-box", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "result bad", role: "alert", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("b", { children: [
-              "🔒 ",
-              claim == null ? void 0 : claim.headline
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: claim == null ? void 0 : claim.detail })
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sheet-backdrop", onClick: result && unconfirmed > 0 ? void 0 : onClose, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      ref: sheetRef,
+      className: `sheet estop-sheet${unconfirmed > 0 ? " danger" : ""}`,
+      onClick: (e) => e.stopPropagation(),
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "estop-sheet-title",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "estop-sheet-title", children: "🛑 Stop everything" }),
+        !result && !error && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: meshBacked ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            "Sends ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: '{action: "stop"}' }),
+            " to every peer with a live heartbeat and reports what each one answered."
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: "Freezes every simulated robot this dashboard is running and latches its lockout; no mesh bridge is online, so no fleet peer is reached from here." }) }),
+          meshBacked && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint", children: [
+            "Fires BOTH rails: per-peer stop commands (answered individually below) and the signed ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "strands/safety/estop" }),
+            " envelope, which engages a fleet-wide LOCKOUT - every listening peer refuses further commands until a resume signed with the operator's key. A peer that is wedged or fully off the mesh still needs the hardware e-stop. The simulated robots of this dashboard are frozen too."
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "resume-row", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                type: "password",
-                placeholder: "resume key passphrase",
-                "aria-label": "resume key passphrase",
-                value: code,
-                onChange: (e) => setCode(e.target.value),
-                onKeyDown: (e) => e.key === "Enter" && resume(),
-                disabled: resuming
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn go", onClick: resume, disabled: resuming || !code.trim(), children: resuming ? "…" : "resume fleet" })
+          linkWarning && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint warn", children: [
+            "⚠ ",
+            linkWarning,
+            " Pressing STOP ALL is still worth it — it is sent the moment the link returns — but do not wait for it: the arms’ power switch is the only brake that does not go through this page."
           ] }),
-          resumeMsg && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hint", children: resumeMsg }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint", children: [
-            "The passphrase opens the resume signing key on this host; a signed resume naming each peer and this lockout is broadcast. Peers hold only the public key (",
-            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_RESUME_PUBLIC_KEY" }),
-            ")."
+            "tip: ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("kbd", { children: "." }),
+            " opens this sheet from anywhere — it works even when a drawer or dialog is covering the button."
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sheet-actions", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn danger big", onClick: fire, disabled: firing, children: firing ? "stopping…" : "STOP ALL ROBOTS" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn ghost", onClick: onClose, disabled: firing, children: "cancel" })
           ] })
-        ] });
-      })(),
-      result.signed_rail && !result.signed_rail.signed && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint warn", children: [
-        "⚠ signed rail unavailable (",
-        result.signed_rail.error,
-        ") — only per-peer stops were sent; no fleet lockout is in place."
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sheet-actions", children: [
-        !result.all_stopped && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn danger", onClick: fire, children: "send again" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn ghost", onClick: onClose, children: "close" })
-      ] })
-    ] })
-  ] }) });
+        ] }),
+        error && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "result bad", role: "alert", children: error.headline }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "hint warn", children: error.advice }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sheet-actions", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn danger", onClick: fire, children: error.retryRepeats ? "send the stop again" : "retry" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn ghost", onClick: onClose, children: "close" })
+          ] })
+        ] }),
+        result && simOnly && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: (simLockout == null ? void 0 : simLockout.state) === "locked" ? "result ok" : "result bad", role: "status", children: (simLockout == null ? void 0 : simLockout.state) === "locked" ? `✓ sim lockout engaged${simLockout.by ? ` by ${simLockout.by}` : ""} - every simulated robot is frozen` : `lockout ${(simLockout == null ? void 0 : simLockout.state) ?? "unknown"}: ${(simLockout == null ? void 0 : simLockout.reason) ?? ""}` }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "hint", children: "Nothing outside this process was reached: the mesh bridge is offline, so a real arm on the desk still needs its power switch." }),
+          (simLockout == null ? void 0 : simLockout.state) === "locked" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "resume-box", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "resume-row", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn go", onClick: resume, disabled: resuming, children: resuming ? "…" : "resume simulation" }) }),
+            resumeMsg && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hint", children: resumeMsg })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sheet-actions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn ghost", onClick: onClose, children: "close" }) })
+        ] }),
+        result && !simOnly && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "div",
+            {
+              className: result.all_stopped ? "result ok" : "result bad",
+              role: result.all_stopped ? "status" : "alert",
+              children: result.all_stopped ? `✓ all ${result.counts.stopped} live peer(s) confirmed stopped` : `⚠ ${unconfirmed} of ${result.targeted.length} peer(s) NOT confirmed stopped`
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "estop-list", children: Object.entries(result.stopped).map(([peer, info]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: info.state, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: peer }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: info.state === "stopped" ? "stopped" : info.state === "no_answer" ? "no answer — may still be moving" : `refused: ${typeof info.detail === "string" ? info.detail : JSON.stringify(info.detail)}` })
+          ] }, peer)) }),
+          result.stale_skipped.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint", children: [
+            "skipped (no heartbeat, cannot be reached): ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: result.stale_skipped.join(", ") })
+          ] }),
+          result.targeted.length === 0 && (() => {
+            const reach = estopNothingTargeted({ staleSkipped: result.stale_skipped });
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "result bad", role: "alert", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: reach.headline }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: reach.detail })
+            ] });
+          })(),
+          result.lockout_engaged && (() => {
+            var _a, _b, _c;
+            const claim = signedRailClaim({
+              lockoutEngaged: result.lockout_engaged,
+              issuer: (_a = result.signed_rail) == null ? void 0 : _a.issuer,
+              responsesReceived: (_b = result.signed_rail) == null ? void 0 : _b.responses_received,
+              peersNotStopped: (_c = result.signed_rail) == null ? void 0 : _c.peers_not_stopped
+            });
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "resume-box", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "result bad", role: "alert", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("b", { children: [
+                  "🔒 ",
+                  claim == null ? void 0 : claim.headline
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: claim == null ? void 0 : claim.detail })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "resume-row", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "password",
+                    placeholder: "resume key passphrase",
+                    "aria-label": "resume key passphrase",
+                    value: code,
+                    onChange: (e) => setCode(e.target.value),
+                    onKeyDown: (e) => e.key === "Enter" && resume(),
+                    disabled: resuming
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn go", onClick: resume, disabled: resuming || !code.trim(), children: resuming ? "…" : "resume fleet" })
+              ] }),
+              resumeMsg && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "hint", children: resumeMsg }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint", children: [
+                "The passphrase opens the resume signing key on this host; a signed resume naming each peer and this lockout is broadcast. Peers hold only the public key (",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_RESUME_PUBLIC_KEY" }),
+                ")."
+              ] })
+            ] });
+          })(),
+          result.signed_rail && !result.signed_rail.signed && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint warn", children: [
+            "⚠ signed rail unavailable (",
+            result.signed_rail.error,
+            ") — only per-peer stops were sent; no fleet lockout is in place."
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sheet-actions", children: [
+            !result.all_stopped && /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn danger", onClick: fire, children: "send again" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn ghost", onClick: onClose, children: "close" })
+          ] })
+        ] })
+      ]
+    }
+  ) });
 }
 function simOnlyResult(_lockout) {
   return {
@@ -11742,10 +11755,12 @@ function Dashboard() {
       mesh.error,
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "hint", children: [
         " ",
-        "No robot can reach this dashboard until it joins. On a laptop or a trusted LAN start it with",
+        "No robot can reach this dashboard until it joins. Everything on this one machine? Start it with",
         " ",
         /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_LOCAL_DEV=1" }),
-        "; for a shared network set the certificate variables (Settings, mesh)."
+        ". Robots on other machines need the certificate variables (Settings, mesh);",
+        " ",
+        "the local-dev flag does not reach past this machine."
       ] })
     ] }),
     dark.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "toast warn", role: "status", children: [
@@ -11819,11 +11834,9 @@ function Dashboard() {
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "hint", children: snippet.provenance }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint", children: [
-          "Set ",
+          "The sim line needs no mesh setup. On this one machine, ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_LOCAL_DEV=1" }),
-          " + ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_MULTICAST=true" }),
-          " for local dev."
+          " lets the real arm join without certificates; from another machine it joins over mTLS (Settings, mesh)."
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn ghost", onClick: () => route("devices"), children: "spawn one here" })
       ] })
