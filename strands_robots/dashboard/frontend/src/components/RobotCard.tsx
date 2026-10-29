@@ -9,6 +9,7 @@ import { twinButtonCopy } from '../lib/twinButton'
 import { deadCameraNote, stoppedCameras } from '../lib/cameraFreshness'
 import CameraTile from './CameraTile'
 import CameraConfigSheet from './CameraConfigSheet'
+import CameraFocus from './CameraFocus'
 import CameraFailures from './CameraFailures'
 import JointStrip from './JointStrip'
 import TelemetryStrip from './TelemetryStrip'
@@ -34,6 +35,8 @@ export default function RobotCard({ peer, twinLive = false, onOpen, onBusyChange
   const [sheet, setSheet] = useState(false)
   // Camera settings straight from the card: which camera, or an add.
   const [camSheet, setCamSheet] = useState<{ cam: string | null; add: boolean } | null>(null)
+  // The enlarged camera view, by camera name.
+  const [focusCam, setFocusCam] = useState<string | null>(null)
 
   const p = peer.presence
   const type = p?.robot_type ?? '?'
@@ -149,12 +152,17 @@ export default function RobotCard({ peer, twinLive = false, onOpen, onBusyChange
         return (
           <>
             {cams.length > 0 && (
-              <div className={cams.length > 1 ? 'cams multi' : 'cams'}>
+              // An odd count leads with the first camera at full width: three feeds in a 2x2 grid left a hole.
+              <div className={['cams', cams.length > 1 ? 'multi' : '', Math.min(cams.length, 4) % 2 ? 'lead' : ''].filter(Boolean).join(' ')}>
                 {cams.slice(0, 4).map(c => (
                   <CameraTile key={c} peerId={peer.peer_id} cam={c} meta={peer.cameras?.[c]}
+                              onExpand={() => setFocusCam(c)}
                               onConfigure={canConfig ? () => setCamSheet({ cam: c, add: false }) : undefined} />
                 ))}
               </div>
+            )}
+            {focusCam && cams.includes(focusCam) && (
+              <CameraFocus peer={peer} cam={focusCam} onCam={setFocusCam} onClose={() => setFocusCam(null)} />
             )}
             <CameraFailures failures={p?.camera_failures} arrived={cams}
                             onReconfigure={canConfig ? c => setCamSheet({ cam: c, add: false }) : undefined} />

@@ -13,10 +13,12 @@ interface Meta { t?: number; shape?: number[]; encoding?: string; displayable?: 
 /** What a struggling viewer asks for: one frame a second still shows a moving arm. */
 const DEGRADED_FPS = 1
 
-export default function CameraTile({ peerId, cam, big = false, meta, onConfigure }: {
+export default function CameraTile({ peerId, cam, big = false, meta, onConfigure, onExpand }: {
   peerId: string; cam: string; big?: boolean; meta?: Meta
   /** offered only for a robot this dashboard manages: opens this camera's settings */
   onConfigure?: () => void
+  /** opens this camera in the large view */
+  onExpand?: () => void
 }) {
   const imgRef = useRef<HTMLImageElement>(null)
   const [status, setStatus] = useState<CamStatus>(() =>
@@ -154,12 +156,12 @@ export default function CameraTile({ peerId, cam, big = false, meta, onConfigure
   }, [peerId, cam])
 
   const shape = meta?.shape?.length ? `${meta.shape[1]}×${meta.shape[0]}` : null
-  const cls = ['camtile', big ? 'big' : '', `cam-${status.kind}`, status.frozen ? 'frozen' : '']
+  const cls = ['camtile', big ? 'big' : '', onExpand ? 'expandable' : '', `cam-${status.kind}`, status.frozen ? 'frozen' : '']
     .filter(Boolean).join(' ')
 
   return (
     <div className={cls}>
-      <img ref={imgRef} alt={`${peerId} ${cam} camera`} />
+      <img ref={imgRef} alt={`${peerId} ${cam} camera`} onClick={onExpand} />
       {!status.live && (
         // aria-live: a stream dying is news. A sighted user gets it from the
         // overlay appearing; a screen reader needs it announced.
@@ -178,6 +180,12 @@ export default function CameraTile({ peerId, cam, big = false, meta, onConfigure
         {cameraPathLabel(meta) && <em title="the robot published an S3 reference; the dashboard fetched the frame"> {cameraPathLabel(meta)}</em>}
         {cameraLatencyLabel(meta) && <em title="publisher clock to dashboard receive"> {cameraLatencyLabel(meta)}</em>}
       </span>
+      {onExpand && (
+        <button className="camexpand" onClick={onExpand}
+                aria-label={`enlarge ${cam} camera`} title={`enlarge ${cam}`}>
+          ⤢
+        </button>
+      )}
       {onConfigure && (
         <button className="camcfg" onClick={onConfigure}
                 aria-label={`adjust ${cam} camera settings`}
