@@ -202,6 +202,12 @@ jobs:
           UV_TORCH_BACKEND: cpu
         run: |
           pip install --no-cache-dir hatch
+          # Fork: hold the hatch test env to the versions in
+          # .github/constraints/test-env.txt (resolved as of the upstream fork
+          # point) instead of whatever PyPI has today. Fresh releases (mujoco,
+          # strands-agents) broke a suite this fork never changed. uv, hatch's
+          # installer, reads UV_CONSTRAINT. The file says how to regenerate it.
+          echo "UV_CONSTRAINT=${GITHUB_WORKSPACE}/.github/constraints/test-env.txt" >> "$GITHUB_ENV"
           pip install --no-cache-dir -e ".[all,dev]"
 
       - name: Run lint
