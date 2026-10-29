@@ -20,6 +20,15 @@ import react from '@vitejs/plugin-react'
  * VITE_* from the environment after this file loads, so setting it here is enough.
  */
 if (process.env.CF_PAGES === '1' && process.env.VITE_DEMO === undefined) process.env.VITE_DEMO = '1'
+/**
+ * Fork patch: Pages builds also get the reviewer feedback widget (src/feedback), told which branch and
+ * commit they show so each issue can say what was reviewed.
+ */
+if (process.env.CF_PAGES === '1') {
+  process.env.VITE_FEEDBACK ??= '1'
+  process.env.VITE_PAGES_BRANCH ??= process.env.CF_PAGES_BRANCH ?? ''
+  process.env.VITE_PAGES_COMMIT ??= process.env.CF_PAGES_COMMIT_SHA ?? ''
+}
 
 export default defineConfig({
   plugins: [react()],

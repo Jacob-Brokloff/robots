@@ -19,3 +19,7 @@ function mount() {
 // the demo module entirely.
 if (import.meta.env.VITE_DEMO === '1') import('./demo').then(m => { m.installDemo(); mount() })
 else mount()
+
+// Fork patch: preview builds only (VITE_FEEDBACK=1): a feedback button that files GitHub issues through
+// the Pages Function in functions/feedback-api/. A normal build drops it like the demo module.
+if (import.meta.env.VITE_FEEDBACK === '1') import('./feedback').then(m => m.installFeedback())
