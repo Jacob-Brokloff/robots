@@ -8101,7 +8101,7 @@ function SettingsDrawer({ open, onClose, mesh, initialTab }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: 'What "wire security off" means:' }),
           " robot commands and camera frames travel the mesh unencrypted and unauthenticated (",
           /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_LOCAL_DEV=1" }),
-          "). That is fine on a trusted home LAN. Before this network is shared or bridged, restart the dashboard ",
+          "). That is a one-machine setting: the mesh refuses to start with it once an endpoint or multicast reaches another machine. Before robots on other machines join, restart the dashboard ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("em", { children: "without" }),
           " that env var so the mesh requires mTLS — then only ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "tls/" }),
@@ -11742,10 +11742,12 @@ function Dashboard() {
       mesh.error,
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "hint", children: [
         " ",
-        "No robot can reach this dashboard until it joins. On a laptop or a trusted LAN start it with",
+        "No robot can reach this dashboard until it joins. Everything on this one machine? Start it with",
         " ",
         /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_LOCAL_DEV=1" }),
-        "; for a shared network set the certificate variables (Settings, mesh)."
+        ". Robots on other machines need the certificate variables (Settings, mesh);",
+        " ",
+        "the local-dev flag does not reach past this machine."
       ] })
     ] }),
     dark.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "toast warn", role: "status", children: [
@@ -11819,11 +11821,9 @@ function Dashboard() {
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "hint", children: snippet.provenance }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint", children: [
-          "Set ",
+          "The sim line needs no mesh setup. On this one machine, ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_LOCAL_DEV=1" }),
-          " + ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_MULTICAST=true" }),
-          " for local dev."
+          " lets the real arm join without certificates; from another machine it joins over mTLS (Settings, mesh)."
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn ghost", onClick: () => route("devices"), children: "spawn one here" })
       ] })
