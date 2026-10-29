@@ -635,6 +635,7 @@ a:hover { color: var(--accent-bright); }
 }
 .camfocus-head { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; color: #fff; }
 .camfocus-head .camswitch { flex: 1; display: flex; gap: var(--s2); flex-wrap: wrap; }
+.camfocus-head .btn { color: #fff; border-color: #fff4; }
 /* the whole frame, uncropped: this view is for looking closely */
 .camfocus .camtile { aspect-ratio: 4/3; }
 .camfocus .camtile img { object-fit: contain; cursor: default; }

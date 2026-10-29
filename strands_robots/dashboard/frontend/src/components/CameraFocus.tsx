@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { Peer } from '../types'
 import CameraTile from './CameraTile'
 
@@ -38,7 +39,8 @@ export default function CameraFocus({ peer, cam, onCam, onClose }: {
     else void boxRef.current?.requestFullscreen?.()
   }
 
-  return (
+  // A portal: the robot card is its own stacking context, which kept this view under the page header.
+  return createPortal(
     <div className="camfocus-backdrop" onClick={onClose}>
       <div ref={boxRef} className="camfocus" role="dialog" aria-modal="true"
            aria-label={`${peer.peer_id} ${cam} camera`} onClick={e => e.stopPropagation()}>
@@ -57,6 +59,7 @@ export default function CameraFocus({ peer, cam, onCam, onClose }: {
         </div>
         <CameraTile key={cam} peerId={peer.peer_id} cam={cam} meta={peer.cameras?.[cam]} big />
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
