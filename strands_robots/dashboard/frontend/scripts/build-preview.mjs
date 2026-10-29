@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
- * The per-PR preview site: the dashboard in demo mode (src/demo), as plain static files in dist/.
+ * The per-PR preview site: the dashboard in demo mode (src/demo) with the reviewer feedback widget
+ * (src/feedback), as plain static files in dist/. The widget posts to functions/feedback-api/, which only
+ * Cloudflare Pages runs, so a local copy shows the button but cannot file issues.
  *
  * Laid out the way the Python server serves the real thing, so no URL in the bundle changes:
  * the build lands in dist/static/ (vite.config.ts `base: '/static/'`), the page is copied up to
@@ -18,6 +20,7 @@ const STATIC = path.join(OUT, 'static')
 const SHIPPED = path.resolve('../static')
 
 process.env.VITE_DEMO = '1'
+process.env.VITE_FEEDBACK ??= '1'
 fs.rmSync(OUT, { recursive: true, force: true })
 await build({ build: { outDir: STATIC, emptyOutDir: true } })
 

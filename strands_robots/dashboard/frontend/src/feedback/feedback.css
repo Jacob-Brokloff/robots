@@ -1,0 +1,74 @@
+/* Reviewer feedback widget (src/feedback). Preview builds only. Every rule is under #feedback-widget,
+   so nothing here can reach the dashboard. Colours come from the dashboard's tokens with fallbacks. */
+#feedback-widget {
+  --fb-ink: var(--text, #000);
+  --fb-paper: var(--panel, #fff);
+  --fb-line: var(--border-hi, #999);
+  --fb-accent: var(--green, #007a3d);
+  --fb-on-accent: var(--on-accent, #fff);
+  --fb-mark: #ff2d55;
+  font-family: var(--sans, system-ui, sans-serif);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--fb-ink);
+}
+#feedback-widget * { box-sizing: border-box; }
+
+/* Above the agent dock bar, which is fixed along the bottom edge (about 60px). */
+#feedback-widget .fb-launch {
+  position: fixed; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 2147483000;
+  display: flex; gap: 8px; align-items: center;
+}
+#feedback-widget .fb-fab {
+  display: inline-flex; align-items: center; gap: 6px; height: 40px; min-width: 40px; padding: 0 11px;
+  justify-content: center; border-radius: 999px; border: 1px solid var(--fb-line);
+  background: var(--fb-paper); color: var(--fb-ink); font: inherit; font-weight: 600; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+}
+#feedback-widget .fb-fab.fb-main { background: var(--fb-accent); color: var(--fb-on-accent); border-color: var(--fb-accent); padding: 0 14px; }
+#feedback-widget .fb-fab:focus-visible, #feedback-widget .fb-btn:focus-visible { outline: 2px solid var(--fb-mark); outline-offset: 2px; }
+
+#feedback-widget .fb-panel {
+  position: fixed; z-index: 2147483001; width: min(320px, calc(100vw - 16px));
+  background: var(--fb-paper); color: var(--fb-ink); border: 1px solid var(--fb-line); border-radius: 10px;
+  padding: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .3); display: flex; flex-direction: column; gap: 8px;
+}
+#feedback-widget .fb-dock { right: 16px; bottom: calc(134px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 150px); overflow-y: auto; }
+#feedback-widget .fb-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+#feedback-widget .fb-form { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+#feedback-widget .fb-input {
+  width: 100%; font: inherit; color: var(--fb-ink); background: var(--panel2, #f4f4f4);
+  border: 1px solid var(--fb-line); border-radius: 6px; padding: 7px 9px; resize: vertical;
+}
+#feedback-widget .fb-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+#feedback-widget .fb-check { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+#feedback-widget .fb-row { display: flex; justify-content: flex-end; gap: 8px; }
+#feedback-widget .fb-btn {
+  font: inherit; font-weight: 600; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--fb-line); background: var(--fb-paper); color: var(--fb-ink);
+}
+#feedback-widget .fb-btn.fb-primary { background: var(--fb-accent); border-color: var(--fb-accent); color: var(--fb-on-accent); }
+#feedback-widget .fb-btn.fb-wide { width: 100%; }
+#feedback-widget .fb-link { font: inherit; font-size: 13px; background: none; border: 0; padding: 0; color: var(--fb-accent); cursor: pointer; text-decoration: underline; }
+#feedback-widget .fb-fine { margin: 0; font-size: 12px; color: var(--dim, #767373); }
+#feedback-widget .fb-fine a { color: var(--fb-accent); }
+#feedback-widget .fb-error { margin: 0; font-size: 13px; color: var(--red, #b42318); }
+
+#feedback-widget .fb-overlay {
+  position: fixed; inset: 0; z-index: 2147483002; cursor: crosshair; touch-action: none;
+  background: rgba(0, 0, 0, .08);
+}
+#feedback-widget .fb-hint {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 24px);
+  padding: 6px 12px; border-radius: 999px; background: #111; color: #fff; font-size: 13px; pointer-events: none;
+}
+#feedback-widget .fb-box {
+  position: fixed; pointer-events: none; border: 3px solid var(--fb-mark); background: rgba(255, 45, 85, .12);
+  border-radius: 3px; z-index: 2147483000;
+}
+#feedback-widget .fb-box.fb-hover { border-style: dashed; border-width: 2px; background: rgba(255, 45, 85, .06); }
+
+#feedback-widget .fb-toast {
+  position: fixed; right: 16px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 2147483001; padding: 8px 14px; border-radius: 999px;
+  background: #111; color: #fff; font-size: 13px;
+}
