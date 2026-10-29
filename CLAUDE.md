@@ -18,6 +18,8 @@ patches** (Jacob OK'd, 2026-10-26; each marked `Fork patch` in the code):
 - `dashboard/frontend` feedback widget (`src/feedback/`, `functions/feedback-api/`): Pages builds (`VITE_FEEDBACK=1`)
   get a button that files reviewer notes and screenshots as GitHub issues labelled `feedback`, through a Pages
   Function (secret `GITHUB_TOKEN`, R2 binding `FEEDBACK_SHOTS`). A normal build drops it.
+- `.github/workflows/claude.yml` + `.github/claude-bot.md`: the label bot. Jacob adds the `claude` label to an issue,
+  Claude Code (GitHub Action, secret `CLAUDE_CODE_OAUTH_TOKEN`) opens a frontend-only PR. Jacob merges by hand.
 The image bakes the package in: rebuild after touching `strands_robots/`.
 
 Git: `origin` = https://github.com/Jacob-Brokloff/robots, `upstream` = https://github.com/strands-labs/robots,
