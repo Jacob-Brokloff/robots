@@ -414,6 +414,7 @@ a:hover { color: var(--accent-bright); }
  * strandsagents.com, as it is there. */
 .logo { display: flex; align-items: center; color: var(--accent); }
 .logo:hover { color: var(--accent-bright); }
+.logo.wordtext { font-family: var(--mono); font-size: 1.05rem; font-weight: 700; letter-spacing: .12em; }
 .mark { display: block; height: 1.15rem; width: auto; }
 .brand h1.project { font-family: var(--mono); font-size: .85rem; font-weight: 600; letter-spacing: 0; color: var(--text); }
 .brand .sub { font-size: var(--fs-tiny); color: var(--dim); font-family: var(--mono); white-space: nowrap; }
