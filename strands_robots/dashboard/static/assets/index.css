@@ -21,6 +21,19 @@
  * ratio quoted below is computed WCAG contrast against the scheme's page.
  */
 
+/* The brand's accent colours and fonts (and their @font-face rules) live in
+   brand/brand.css; the scheme blocks below read them as --brand-*. */
+/*
+ * The brand's colours and type, the only values a rebrand changes in CSS.
+ * styles.css maps these onto its semantic tokens (--green, --accent, --ok,
+ * --focus...) for each scheme, so nothing else names a brand colour or font.
+ *
+ * Every accent pairs a paper value and a dark value. Keep each one at WCAG AA
+ * against its scheme's page (white paper, black dark) and keep --brand-on-* at
+ * AA on its accent fill: the dashboard uses the accent for "the robot answered",
+ * so it has to read as clearly as the red does.
+ */
+
 /* Self-hosted variable fonts (public/fonts, OFL 1.1): the docs load the same two
    families from Google Fonts, but a dashboard on a robot LAN may have no
    internet, so the files ship with the bundle. */
@@ -37,6 +50,26 @@
   font-weight: 300 700;
   font-display: swap;
   src: url(/static/fonts/SpaceGrotesk-wght.woff2) format('woff2');
+}
+
+:root {
+  /* type: mono for headings, labels, pills and numbers; sans for sentences */
+  --brand-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --brand-font-sans: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* paper scheme */
+  --brand-accent-paper: #007a3d;                  /* --sr-accent (5.45:1) */
+  --brand-accent-bright-paper: #02a435;           /* --sr-accent-bright: hover */
+  --brand-accent-soft-paper: rgba(2, 164, 53, .12); /* --sr-accent-soft: tint under a live row */
+  --brand-on-accent-paper: #ffffff;               /* text on an accent fill (5.45:1) */
+  --brand-surface-ok-paper: #e6f6e7;              /* --sr-surface-green */
+
+  /* dark scheme */
+  --brand-accent-dark: #00cc60;                   /* (9.81:1) */
+  --brand-accent-bright-dark: #00cc60;
+  --brand-accent-soft-dark: rgba(0, 204, 96, .14);
+  --brand-on-accent-dark: #000000;                /* (9.81:1) */
+  --brand-surface-ok-dark: color-mix(in srgb, #00cc60 74%, #000);
 }
 
 /* ── scheme: paper (the default when the OS asks for light) ─────────── */
@@ -56,11 +89,11 @@
   --quiet: #3d3c3c;            /* clickable but restrained; never the disabled grey */
   --dim: #767373;              /* --sr-muted: the DISABLED and muted colour (4.70:1) */
   /* the one green, and the two semantic colours the docs do not have */
-  --green: #007a3d;            /* --sr-accent (5.45:1) */
-  --accent-bright: #02a435;    /* --sr-accent-bright: hover */
-  --accent-soft: rgba(2, 164, 53, .12);  /* --sr-accent-soft: tint under a live row */
-  --on-accent: #ffffff;        /* --sr-on-accent: text on a green fill (5.45:1) */
-  --surface-ok: #e6f6e7;       /* --sr-surface-green */
+  --green: var(--brand-accent-paper);
+  --accent-bright: var(--brand-accent-bright-paper);
+  --accent-soft: var(--brand-accent-soft-paper);
+  --on-accent: var(--brand-on-accent-paper);
+  --surface-ok: var(--brand-surface-ok-paper);
   --amber: #946e00;            /* the docs' "real" yellow, deepened for paper (4.68:1) */
   --on-warn: #ffffff;          /* text on an amber fill (4.68:1) */
   --red: #b42318;              /* AA red on white (6.57:1); physical danger only */
@@ -84,11 +117,11 @@
   --text-2: #b6b6b6;           /* (10.36:1) */
   --quiet: #b6b6b6;
   --dim: #999696;              /* (7.16:1) */
-  --green: #00cc60;            /* --sr-accent (9.81:1) */
-  --accent-bright: #00cc60;
-  --accent-soft: rgba(0, 204, 96, .14);
-  --on-accent: #000000;        /* (9.81:1) */
-  --surface-ok: color-mix(in srgb, #00cc60 74%, #000);
+  --green: var(--brand-accent-dark);
+  --accent-bright: var(--brand-accent-bright-dark);
+  --accent-soft: var(--brand-accent-soft-dark);
+  --on-accent: var(--brand-on-accent-dark);
+  --surface-ok: var(--brand-surface-ok-dark);
   --amber: #f6bc00;            /* the docs' "real" yellow (12.11:1) */
   --on-warn: #000000;          /* (12.11:1) */
   --red: #ff5c5c;              /* (6.94:1) */
@@ -111,11 +144,11 @@
     --text-2: #b6b6b6;
     --quiet: #b6b6b6;
     --dim: #999696;
-    --green: #00cc60;
-    --accent-bright: #00cc60;
-    --accent-soft: rgba(0, 204, 96, .14);
-    --on-accent: #000000;
-    --surface-ok: color-mix(in srgb, #00cc60 74%, #000);
+    --green: var(--brand-accent-dark);
+    --accent-bright: var(--brand-accent-bright-dark);
+    --accent-soft: var(--brand-accent-soft-dark);
+    --on-accent: var(--brand-on-accent-dark);
+    --surface-ok: var(--brand-surface-ok-dark);
     --amber: #f6bc00;
     --on-warn: #000000;
     --red: #ff5c5c;
@@ -143,8 +176,8 @@
   --r1: 3px; --r2: 6px; --r3: 8px; --r4: 8px; --r5: 8px; --rpill: 999px;
 
   /* type: mono for headings, labels, pills and numbers; grotesk for sentences */
-  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --sans: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: var(--brand-font-mono);
+  --sans: var(--brand-font-sans);
   /* Four steps, in rem so the phone root (16px, below) scales them together:
      label 11.25 / small 12.5 / body 14 / lg 16 at the 15px desktop root. The older five names
      stay as aliases so no rule has to move. */

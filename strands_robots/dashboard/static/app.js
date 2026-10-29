@@ -1750,7 +1750,7 @@ function quietNotice(ids, dead = []) {
   const headline = quiet.length === 1 ? `${quiet[0]} started but never joined the fleet` : `${quiet.length} robots you started never joined the fleet`;
   return { headline, detail, count: quiet.length };
 }
-function StrandsMark({ height = 18, title }) {
+function BrandMark({ height = 18, title }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "svg",
     {
@@ -1776,6 +1776,16 @@ function StrandsMark({ height = 18, title }) {
     }
   );
 }
+const BRAND = {
+  /** Product name: the tab title and the identity line on the passkey gate. */
+  name: "Strands Robots",
+  /** Who the wordmark names: its accessible label and tooltip. */
+  company: "Strands Agents",
+  /** Where the wordmark links. */
+  homeUrl: "https://strandsagents.com/",
+  /** The mono project label beside the wordmark. */
+  project: "/robots"
+};
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 function looksLikeClose(c) {
   const words2 = `${c.label ?? ""} ${c.text ?? ""}`.trim().toLowerCase();
@@ -1979,9 +1989,9 @@ Open devices for the exit status and the last output.`,
   ] });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "fleetbar", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brand", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "logo", href: "https://strandsagents.com/", title: "Strands Agents", "aria-label": "Strands Agents", children: /* @__PURE__ */ jsxRuntimeExports.jsx(StrandsMark, { height: 18, title: "Strands Agents" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "logo", href: BRAND.homeUrl, title: BRAND.company, "aria-label": BRAND.company, children: /* @__PURE__ */ jsxRuntimeExports.jsx(BrandMark, { height: 18, title: BRAND.company }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "project", children: "/robots" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "project", children: BRAND.project }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sub", title: `API: ${backendLabel()}`, children: [
           dashboardId || "fleet cockpit",
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "backend", children: [
@@ -8101,7 +8111,7 @@ function SettingsDrawer({ open, onClose, mesh, initialTab }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: 'What "wire security off" means:' }),
           " robot commands and camera frames travel the mesh unencrypted and unauthenticated (",
           /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_LOCAL_DEV=1" }),
-          "). That is fine on a trusted home LAN. Before this network is shared or bridged, restart the dashboard ",
+          "). That is a one-machine setting: the mesh refuses to start with it once an endpoint or multicast reaches another machine. Before robots on other machines join, restart the dashboard ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("em", { children: "without" }),
           " that env var so the mesh requires mTLS — then only ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "tls/" }),
@@ -11371,7 +11381,7 @@ function AuthGate({ children }) {
   }
   if (mode === "checking") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "authgate", role: "status", "aria-live": "polite", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "authcard", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(StrandsMark, { height: 26, title: "Strands Agents" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BrandMark, { height: 26, title: BRAND.company }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "dim", children: "checking access…" })
     ] }) });
   }
@@ -11379,9 +11389,10 @@ function AuthGate({ children }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "authgate", children: [
     foreignBanner,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "authcard", role: "dialog", "aria-labelledby": "authgate-title", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(StrandsMark, { height: 26, title: "Strands Agents" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BrandMark, { height: 26, title: BRAND.company }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "authhost", children: [
-        "strands robots · ",
+        BRAND.name.toLowerCase(),
+        " · ",
         window.location.host
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { id: "authgate-title", children: mode === "unreachable" ? "backend unreachable" : mode === "enroll" ? "create the admin passkey" : "unlock with your passkey" }),
@@ -11742,10 +11753,12 @@ function Dashboard() {
       mesh.error,
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "hint", children: [
         " ",
-        "No robot can reach this dashboard until it joins. On a laptop or a trusted LAN start it with",
+        "No robot can reach this dashboard until it joins. Everything on this one machine? Start it with",
         " ",
         /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_LOCAL_DEV=1" }),
-        "; for a shared network set the certificate variables (Settings, mesh)."
+        ". Robots on other machines need the certificate variables (Settings, mesh);",
+        " ",
+        "the local-dev flag does not reach past this machine."
       ] })
     ] }),
     dark.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "toast warn", role: "status", children: [
@@ -11819,11 +11832,9 @@ function Dashboard() {
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "hint", children: snippet.provenance }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "hint", children: [
-          "Set ",
+          "The sim line needs no mesh setup. On this one machine, ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_LOCAL_DEV=1" }),
-          " + ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "STRANDS_MESH_MULTICAST=true" }),
-          " for local dev."
+          " lets the real arm join without certificates; from another machine it joins over mTLS (Settings, mesh)."
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn ghost", onClick: () => route("devices"), children: "spawn one here" })
       ] })

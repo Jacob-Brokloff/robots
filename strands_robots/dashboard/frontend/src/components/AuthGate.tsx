@@ -14,7 +14,8 @@ import {
   fetchAuthStatus, enroll, webauthnReady, type AuthStatus,
   beginLogin, completeLogin, loginFresh, type PreparedLogin, type SessionGrant,
 } from '../lib/passkey'
-import StrandsMark from './StrandsMark'
+import BrandMark from '../brand/BrandMark'
+import { BRAND } from '../brand/brand'
 
 /** Build stamp so a human (or a screenshot) can tell WHICH gate they're on. */
 const BUILD = (import.meta as any).env?.VITE_BUILD ?? 'dev'
@@ -190,7 +191,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   if (mode === 'checking') {
     return (
       <div className="authgate" role="status" aria-live="polite">
-        <div className="authcard"><StrandsMark height={26} title="Strands Agents" /><p className="dim">checking access…</p></div>
+        <div className="authcard"><BrandMark height={26} title={BRAND.company} /><p className="dim">checking access…</p></div>
       </div>
     )
   }
@@ -201,9 +202,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     <div className="authgate">
       {foreignBanner}
       <div className="authcard" role="dialog" aria-labelledby="authgate-title">
-        <StrandsMark height={26} title="Strands Agents" />
+        <BrandMark height={26} title={BRAND.company} />
         {/* Identity on the gate: an anonymous credential prompt is what a phishing page looks like. */}
-        <p className="authhost">strands robots · {window.location.host}</p>
+        <p className="authhost">{BRAND.name.toLowerCase()} · {window.location.host}</p>
         <h1 id="authgate-title">
           {mode === 'unreachable' ? 'backend unreachable'
             : mode === 'enroll' ? 'create the admin passkey'
