@@ -3,7 +3,8 @@ import type { ConnState } from '../lib/useMesh'
 import { backendLabel } from '../lib/endpoints'
 import { connBadge } from '../lib/connBadge'
 import { absentNotice, quietNotice, type AbsentChild } from '../lib/absentChildren'
-import StrandsMark from './StrandsMark'
+import BrandMark from '../brand/BrandMark'
+import { BRAND } from '../brand/brand'
 import { useEffect, useRef, useState } from 'react'
 import { useDialogFocus } from '../lib/useDialogFocus'
 import { chooseScheme, effectiveScheme, nextScheme, storedScheme, systemScheme, type Scheme } from '../lib/scheme'
@@ -123,13 +124,13 @@ export default function FleetBar({
   return (
     <header className="fleetbar">
       <div className="brand">
-        {/* The docs header, verbatim (overrides/partials/logo.html): the wordmark links out to
-            strandsagents.com, "/robots" names this project. */}
-        <a className="logo" href="https://strandsagents.com/" title="Strands Agents" aria-label="Strands Agents">
-          <StrandsMark height={18} title="Strands Agents" />
+        {/* The docs header (overrides/partials/logo.html): the wordmark links out to the
+            company site, the project label names this project. Both come from brand/brand.ts. */}
+        <a className="logo" href={BRAND.homeUrl} title={BRAND.company} aria-label={BRAND.company}>
+          <BrandMark height={18} title={BRAND.company} />
         </a>
         <div>
-          <h1 className="project">/robots</h1>
+          <h1 className="project">{BRAND.project}</h1>
           <div className="sub" title={`API: ${backendLabel()}`}>
             {dashboardId || 'fleet cockpit'}
             <span className="backend"> · {backendLabel()}</span>

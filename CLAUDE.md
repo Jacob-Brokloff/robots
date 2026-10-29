@@ -12,6 +12,8 @@ patches** (Jacob OK'd, 2026-10-26; each marked `Fork patch` in the code):
 - `mesh/core.py` `_publish_sim_cameras` reuses one renderer per thread, closing it when the model is recompiled
   (fresh renderers cost 150-220 ms each; an unclosed stale one renders noise on this AMD/mesa stack).
 - `dashboard/device_manager.py` spawned sims step at real time (was `step(5)` per 0.2 s, 5% of real time).
+- `dashboard/frontend/src/brand/` holds the dashboard's brand (names, links, accent colours, fonts, wordmark),
+  so a rebrand edits that directory plus `public/icon.svg` / `apple-touch-icon.png`, then rebuilds the bundle.
 The image bakes the package in: rebuild after touching `strands_robots/`.
 
 Git: `origin` = https://github.com/Jacob-Brokloff/robots, `upstream` = https://github.com/strands-labs/robots,

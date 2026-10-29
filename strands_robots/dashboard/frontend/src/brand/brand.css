@@ -1,0 +1,48 @@
+/*
+ * The brand's colours and type, the only values a rebrand changes in CSS.
+ * styles.css maps these onto its semantic tokens (--green, --accent, --ok,
+ * --focus...) for each scheme, so nothing else names a brand colour or font.
+ *
+ * Every accent pairs a paper value and a dark value. Keep each one at WCAG AA
+ * against its scheme's page (white paper, black dark) and keep --brand-on-* at
+ * AA on its accent fill: the dashboard uses the accent for "the robot answered",
+ * so it has to read as clearly as the red does.
+ */
+
+/* Self-hosted variable fonts (public/fonts, OFL 1.1): the docs load the same two
+   families from Google Fonts, but a dashboard on a robot LAN may have no
+   internet, so the files ship with the bundle. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url(/static/fonts/JetBrainsMono-wght.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url(/static/fonts/SpaceGrotesk-wght.woff2) format('woff2');
+}
+
+:root {
+  /* type: mono for headings, labels, pills and numbers; sans for sentences */
+  --brand-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --brand-font-sans: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* paper scheme */
+  --brand-accent-paper: #007a3d;                  /* --sr-accent (5.45:1) */
+  --brand-accent-bright-paper: #02a435;           /* --sr-accent-bright: hover */
+  --brand-accent-soft-paper: rgba(2, 164, 53, .12); /* --sr-accent-soft: tint under a live row */
+  --brand-on-accent-paper: #ffffff;               /* text on an accent fill (5.45:1) */
+  --brand-surface-ok-paper: #e6f6e7;              /* --sr-surface-green */
+
+  /* dark scheme */
+  --brand-accent-dark: #00cc60;                   /* (9.81:1) */
+  --brand-accent-bright-dark: #00cc60;
+  --brand-accent-soft-dark: rgba(0, 204, 96, .14);
+  --brand-on-accent-dark: #000000;                /* (9.81:1) */
+  --brand-surface-ok-dark: color-mix(in srgb, #00cc60 74%, #000);
+}

@@ -1,5 +1,38 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { BRAND } from './src/brand/brand'
+
+/**
+ * Fills index.html's %BRAND_*% placeholders from src/brand/brand.ts, so the tab
+ * title, home-screen label and theme colours follow the same file as the app.
+ * Runs before Vite's own %ENV% pass, and an unknown placeholder fails the build
+ * rather than shipping as literal text. The HTML comment is dropped: it only
+ * points a reader of the source at this plugin.
+ */
+function brandHtml(): Plugin {
+  const values: Record<string, string> = {
+    NAME: BRAND.name,
+    SHORT_NAME: BRAND.shortName,
+    DESCRIPTION: BRAND.description,
+    THEME_PAPER: BRAND.themeColor.paper,
+    THEME_DARK: BRAND.themeColor.dark,
+  }
+  const escape = (v: string) =>
+    v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return {
+    name: 'brand-html',
+    transformIndexHtml: {
+      order: 'pre',
+      handler: (html) =>
+        html
+          .replace(/\n *<!-- %BRAND_\*% [^>]*-->/, '')
+          .replace(/%BRAND_([A-Z_]+)%/g, (_, key: string) => {
+            if (!(key in values)) throw new Error(`index.html: unknown placeholder %BRAND_${key}%`)
+            return escape(values[key])
+          }),
+    },
+  }
+}
 
 /**
  * The bundle is served by the Python dashboard process: `server.py` mounts the
@@ -15,7 +48,7 @@ import react from '@vitejs/plugin-react'
  * control `/` anyway.
  */
 export default defineConfig({
-  plugins: [react()],
+  plugins: [brandHtml(), react()],
   base: '/static/',
   publicDir: 'public',
   build: {

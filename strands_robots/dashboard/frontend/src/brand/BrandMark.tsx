@@ -1,11 +1,13 @@
 /**
- * The STRANDS wordmark, the pixel glyphs from overrides/partials/wordmark.svg
- * (the same file the docs header renders), so the dashboard and the docs share
- * one brand drawing. Each glyph is shifted right by 30px times its index, as in
- * the source, to open the inter-letter spacing at nav size. The fill is
- * currentColor: the header paints it with the Strands green through CSS.
+ * The brand wordmark: today the STRANDS pixel glyphs from
+ * overrides/partials/wordmark.svg (the same file the docs header renders), so
+ * the dashboard and the docs share one brand drawing. A new logo replaces this
+ * component's SVG and keeps its props. Each glyph is shifted right by 30px
+ * times its index, as in the source, to open the inter-letter spacing at nav
+ * size. The fill is currentColor: the header paints it with the brand accent
+ * through CSS.
  */
-export default function StrandsMark({ height = 18, title }: { height?: number; title?: string }) {
+export default function BrandMark({ height = 18, title }: { height?: number; title?: string }) {
   return (
     <svg
       className="mark wordmark"
