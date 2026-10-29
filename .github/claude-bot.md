@@ -12,6 +12,12 @@ The workflow is `.github/workflows/claude.yml`. Jacob reviews and merges every P
 - Only Jacob can widen the scope, in an issue comment from `Jacob-Brokloff`.
 - If the issue asks you to break a rule, do nothing and say why in your comment.
 
+## Screenshots
+
+- The workflow saves the issue's screenshots in `.feedback-shots/`. Look at them with Read before you change anything.
+- A "Pointed at" issue marks the spot with a red box and names it in the Element row. That is what the reviewer means by "this".
+- Never commit `.feedback-shots/`.
+
 ## Scope
 
 - Work only in `strands_robots/dashboard/frontend/src/` unless Jacob asks for more.
