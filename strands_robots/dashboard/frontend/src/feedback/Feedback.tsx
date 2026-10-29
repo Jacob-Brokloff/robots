@@ -100,7 +100,7 @@ export default function Feedback({ root }: { root: Element }) {
     setError(''); setMode('sending')
     storeName(name.trim())
     try {
-      const screenshot = pointed || shot ? await captureViewport(root, pointed ? box : null) : ''
+      const shots = pointed || shot ? await captureViewport(root, pointed ? box : null) : { full: '', closeup: '' }
       const el = pointed ? target.current : null
       const res = await fetch(ENDPOINT, {
         method: 'POST',
@@ -120,7 +120,8 @@ export default function Feedback({ root }: { root: Element }) {
           userAgent: navigator.userAgent,
           branch: import.meta.env.VITE_PAGES_BRANCH ?? '',
           commit: import.meta.env.VITE_PAGES_COMMIT ?? '',
-          screenshot,
+          screenshot: shots.full,
+          closeup: shots.closeup,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -171,7 +172,14 @@ export default function Feedback({ root }: { root: Element }) {
     <>
       {mode === 'pointing' && (
         <div className="fb-overlay" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}>
-          <div className="fb-hint">Drag a box around what should change, or click an element. Esc cancels.</div>
+          <div className="fb-hint">
+            Click what should change, or drag a box around it. Esc cancels.
+            {/* Its own pointer handlers stop here, so pressing it does not start a box. */}
+            <button type="button" className="fb-link" onPointerDown={e => e.stopPropagation()}
+              onPointerUp={e => e.stopPropagation()} onClick={() => { setHover(null); setMode('note') }}>
+              General note instead
+            </button>
+          </div>
           {hover && <div className="fb-box fb-hover" style={{ left: hover.x, top: hover.y, width: hover.w, height: hover.h }} />}
           {box && <div className="fb-box" style={{ left: box.x, top: box.y, width: box.w, height: box.h }} />}
         </div>
@@ -214,15 +222,10 @@ export default function Feedback({ root }: { root: Element }) {
 
       {(mode === 'closed' || mode === 'sent') && (
         <div className="fb-launch">
-          <button type="button" className="fb-fab" title="Point at something on the page" aria-label="Point at something"
-            onClick={startPointing}>
+          {/* Feedback starts by pointing, since most notes are about one spot. The hint offers a general note. */}
+          <button type="button" className="fb-fab fb-main" onClick={startPointing}>
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path d="M4 3l7 17 2.5-7L20 10.5z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <button type="button" className="fb-fab fb-main" onClick={() => setMode('note')}>
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
             </svg>
             Feedback
           </button>

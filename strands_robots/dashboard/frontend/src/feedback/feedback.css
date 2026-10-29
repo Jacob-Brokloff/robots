@@ -61,7 +61,9 @@
 #feedback-widget .fb-hint {
   position: fixed; top: 12px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 24px);
   padding: 6px 12px; border-radius: 999px; background: #111; color: #fff; font-size: 13px; pointer-events: none;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center;
 }
+#feedback-widget .fb-hint .fb-link { pointer-events: auto; color: #9fe1b8; }
 #feedback-widget .fb-box {
   position: fixed; pointer-events: none; border: 3px solid var(--fb-mark); background: rgba(255, 45, 85, .12);
   border-radius: 3px; z-index: 2147483000;

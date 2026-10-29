@@ -138,26 +138,28 @@ export async function onRequestPost({ request, env }: Ctx): Promise<Response> {
   const vp = (b.viewport ?? {}) as Record<string, unknown>
   const box = (b.box ?? null) as Record<string, unknown> | null
 
-  let shotUrl = ''
   let shotNote = ''
-  const shot = str(b.screenshot, MAX_BODY)
-  if (shot) {
-    const bytes = jpeg(shot)
-    if (!bytes) shotNote = 'Screenshot rejected (not a JPEG, or too large).'
-    else if (!env.FEEDBACK_SHOTS) shotNote = 'Screenshot not stored: no FEEDBACK_SHOTS bucket is bound to this site.'
-    else {
-      const id = crypto.randomUUID()
-      await env.FEEDBACK_SHOTS.put(`shots/${id}.jpg`, bytes, { httpMetadata: { contentType: 'image/jpeg' } })
-      shotUrl = `${env.FEEDBACK_IMAGE_ORIGIN || url.origin}/feedback-api/shot/${id}.jpg`
-    }
+  /** Stores one JPEG data URL and returns the address the issue shows it from, or '' (with shotNote set). */
+  async function store(dataUrl: string): Promise<string> {
+    if (!dataUrl) return ''
+    const bytes = jpeg(dataUrl)
+    if (!bytes) { shotNote = 'Screenshot rejected (not a JPEG, or too large).'; return '' }
+    if (!env.FEEDBACK_SHOTS) { shotNote = 'Screenshot not stored: no FEEDBACK_SHOTS bucket is bound to this site.'; return '' }
+    const id = crypto.randomUUID()
+    await env.FEEDBACK_SHOTS.put(`shots/${id}.jpg`, bytes, { httpMetadata: { contentType: 'image/jpeg' } })
+    return `${env.FEEDBACK_IMAGE_ORIGIN || url.origin}/feedback-api/shot/${id}.jpg`
   }
+  const shotUrl = await store(str(b.screenshot, MAX_BODY))
+  // The close-up of the pointed spot, so the reader sees what "this" is without hunting in the full screen.
+  const closeupUrl = kind === 'point' && shotUrl ? await store(str(b.closeup, MAX_BODY)) : ''
 
   const firstLine = note.split('\n')[0].replace(/\s+/g, ' ').trim()
   const title = `Feedback: ${defuse(firstLine.length > 70 ? firstLine.slice(0, 69) + '…' : firstLine)}`
   const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : 0)
 
+  const what = element ? ` "${element.replace(/[|\n]/g, ' ')}"` : ''
   const rows: string[] = [`| Page | ${code(page)} |`]
-  if (kind === 'point' && selector) rows.push(`| Element | ${code(selector)}${element ? ` "${element.replace(/[|\n]/g, ' ')}"` : ''} |`)
+  if (kind === 'point' && selector) rows.push(`| Element | ${code(selector)}${what} |`)
   if (kind === 'point' && box) rows.push(`| Box | x ${n(box.x)}, y ${n(box.y)}, ${n(box.w)} x ${n(box.h)} px |`)
   rows.push(`| Viewport | ${n(vp.w)} x ${n(vp.h)} at ${Number(vp.dpr) || 1}x, ${code(str(b.scheme, 20) || 'unknown')} scheme |`)
   if (branch || commit) {
@@ -171,6 +173,8 @@ export async function onRequestPost({ request, env }: Ctx): Promise<Response> {
     '',
     defuse(note).split('\n').map(l => `> ${l}`).join('\n'),
     '',
+    ...(kind === 'point' && selector ? [`**Pointed at:** ${code(selector)}${what} (red box)`, ''] : []),
+    ...(closeupUrl ? [`![close-up of the pointed spot](${closeupUrl})`, ''] : []),
     shotUrl ? `![screenshot](${shotUrl})` : shotNote,
     '',
     '| | |',
