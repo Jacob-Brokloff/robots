@@ -14,6 +14,13 @@ import react from '@vitejs/plugin-react'
  * replayed request is a liability, and under `/static/` a worker could not
  * control `/` anyway.
  */
+/**
+ * Fork patch: a Cloudflare Pages build is the per-PR preview site: static files with no server and no robots
+ * behind them, so it runs in demo mode (src/demo). Pages sets CF_PAGES=1 on every build. Vite reads
+ * VITE_* from the environment after this file loads, so setting it here is enough.
+ */
+if (process.env.CF_PAGES === '1' && process.env.VITE_DEMO === undefined) process.env.VITE_DEMO = '1'
+
 export default defineConfig({
   plugins: [react()],
   base: '/static/',

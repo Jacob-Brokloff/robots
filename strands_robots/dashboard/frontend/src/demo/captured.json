@@ -1,0 +1,4816 @@
+{
+ "_note": "Responses captured from a real strands-robots dashboard with a simulated XLeRobot, paths scrubbed. Demo builds only (src/demo).",
+ "mesh": {
+  "auth_mode": "none",
+  "backend": "zenoh",
+  "camera_hz": 0.0,
+  "connect": [],
+  "error": null,
+  "listen": [],
+  "live_peers": 4,
+  "local_dev": true,
+  "max_cmd_bytes": 16384,
+  "multicast": "",
+  "online": true,
+  "peer_id": "dashboard-desktop",
+  "peers": 4,
+  "policy_allow": [
+   "act",
+   "c3",
+   "cosmos3",
+   "cumotion",
+   "curobo",
+   "diffusion",
+   "f3a",
+   "flux3",
+   "flux3_action",
+   "groot",
+   "gtp",
+   "gtp_g1",
+   "holosoma",
+   "kimodo",
+   "kimodo_g1",
+   "lerobot",
+   "lerobot_local",
+   "microduck",
+   "mjlab_onnx",
+   "mock",
+   "moveit",
+   "moveit2",
+   "pi0",
+   "pi0fast",
+   "protomotions",
+   "protomotions_g1",
+   "random",
+   "remote",
+   "rl",
+   "rsl_rl_onnx",
+   "sac",
+   "smolvla",
+   "sonic",
+   "sonic_gait",
+   "sonic_latent",
+   "tdmpc",
+   "test",
+   "text2motion",
+   "vqbet",
+   "wbc",
+   "wbc_gait",
+   "wbc_latent"
+  ],
+  "port": "7447",
+  "settings": {
+   "backend": null,
+   "camera_hz": null,
+   "connect": [],
+   "listen": [],
+   "policy_type_allow": [],
+   "port": null
+  },
+  "wire_security": "DISABLED (local dev)"
+ },
+ "routes": {
+  "/api/agent": {
+   "asks_first": [],
+   "fleet_aware": true,
+   "interrupt": "physical_motion",
+   "model": "global.anthropic.claude-sonnet-4-6",
+   "tools": [
+    "emergency_stop",
+    "fleet",
+    "spawn_robot",
+    "despawn_robot",
+    "woodside",
+    "leader_arms",
+    "xlerobot_sim_2711",
+    "xlerobot_sim_2711__xlerobot"
+   ]
+  },
+  "/api/auth/credentials": {
+   "credentials": [
+    {
+     "created": 1793300000,
+     "id": "demo",
+     "label": "demo passkey",
+     "last_used": 1793302000
+    }
+   ]
+  },
+  "/api/auth/status": {
+   "authenticated": true,
+   "bootstrap_required": false,
+   "bootstrap_source": "file",
+   "credentials": [
+    {
+     "id": "demo",
+     "label": "demo passkey"
+    }
+   ],
+   "enabled": true,
+   "open_posture": false,
+   "rp_id": "localhost",
+   "rpid_usable": true,
+   "secure_context": true,
+   "setup_required": false
+  },
+  "/api/calibration": {
+   "count": 0,
+   "entries": [],
+   "root": "/home/jbit/.cache/huggingface/lerobot/calibration",
+   "status": "success",
+   "text": "**LeRobot Calibrations**\nLocation: `/home/jbit/.cache/huggingface/lerobot/calibration`\n\nNo calibrations found."
+  },
+  "/api/checkpoints/families": {
+   "families": [
+    "act",
+    "diffusion",
+    "pi0",
+    "pi0_fast",
+    "smolvla",
+    "tdmpc",
+    "vqbet"
+   ]
+  },
+  "/api/checkpoints/features": {},
+  "/api/checkpoints/search": {
+   "hf_auth": {
+    "authenticated": false,
+    "detail": "no HF token on this machine",
+    "user": null
+   },
+   "hub_problem": "Hub search unavailable (ProxyError: 403 Forbidden) - showing local cache only",
+   "query": "",
+   "results": [],
+   "robot": null,
+   "total_matched": 0
+  },
+  "/api/config": {
+   "agent": {
+    "asks_first": [],
+    "is_default_prompt": true,
+    "known_models": [
+     "claude-opus-5",
+     "claude-sonnet-5",
+     "claude-haiku-4-5-20251001",
+     "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+     "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    ],
+    "max_tokens": null,
+    "model": "global.anthropic.claude-sonnet-4-6",
+    "model_id": null,
+    "system_prompt": "You are the strands-robots dashboard agent. You operate robots for an operator who is\nwatching the same screen. Be brief.\n\nEvery robot here is a peer on the zenoh mesh and appears as a card on the dashboard: `fleet` lists\nthem with their state, `spawn_robot` creates a new simulated robot as a mesh peer (its card appears\nwithin seconds), `despawn_robot` removes one, and each peer is also a tool named after it (dashes\nbecome underscores) whose actions are what that peer accepts: status, state, set_joints\n(target_joints, radians), reset, step, stop, execute/start for policy rollouts, and on a simulation\npeer every published action of the simulation tool as well (add_object, list_objects, move_object,\nadd_camera, render, get_robot_state, move_to, set_gripper and the rest of its enum), called with the\naction's own parameters as fields. spawn_robot returns the new peer's tool names and they are\ncallable in the same turn. When the operator says \"create a robot\", use spawn_robot. When they name\na robot, use that robot's own tool. To put something into a robot's world, use that robot's tool\nwith the simulation action (a cube is add_object with name, shape, size, color, position). Joint\npositions are radians unless the peer's state says otherwise; joints are addressed by name or by\n1-based index as strings. A move you request may be put to the operator first; if they decline, say\nso and stop. Never work around a refusal or an e-stop.\n\nEach fleet row carries `policies`: the robot the peer is and `can_run`, the providers that apply to\nit with the kwargs the wire accepts (types, bounds) and what each needs. For a motion request pick a\nprovider from that list: a Unitree G1 walks with `wbc` (model_path = the checkpoint directory on the\nrobot host, walk true, target_velocity [vx, vy, wz] within the bounds shown); an arm runs\n`lerobot_local` with pretrained_name_or_path and policy_type. `mock` is a sine test that proves the\nplumbing and never performs a task: use it only when the operator asks for it. When a provider needs\na checkpoint or a server and none was given, ask for it instead of guessing or falling back to\nmock. Send only the kwargs listed for that provider; the robot host refuses anything else.",
+    "temperature": null
+   },
+   "env": [
+    {
+     "editable": true,
+     "in_file": false,
+     "key": "OPENAI_API_KEY",
+     "secret": true,
+     "set": false,
+     "shadowed": false,
+     "value": ""
+    },
+    {
+     "editable": true,
+     "in_file": false,
+     "key": "HF_TOKEN",
+     "secret": true,
+     "set": false,
+     "shadowed": false,
+     "value": ""
+    },
+    {
+     "editable": true,
+     "in_file": false,
+     "key": "AWS_REGION",
+     "secret": false,
+     "set": false,
+     "shadowed": false,
+     "value": ""
+    },
+    {
+     "editable": true,
+     "in_file": false,
+     "key": "AWS_PROFILE",
+     "secret": false,
+     "set": false,
+     "shadowed": false,
+     "value": ""
+    },
+    {
+     "editable": true,
+     "in_file": false,
+     "key": "VOICE_MODEL",
+     "secret": false,
+     "set": false,
+     "shadowed": false,
+     "value": ""
+    },
+    {
+     "editable": false,
+     "in_file": false,
+     "key": "STRANDS_MESH_LOCAL_DEV",
+     "secret": false,
+     "set": true,
+     "shadowed": false,
+     "value": "true"
+    },
+    {
+     "editable": false,
+     "in_file": false,
+     "key": "STRANDS_MESH_MULTICAST",
+     "secret": false,
+     "set": false,
+     "shadowed": false,
+     "value": ""
+    },
+    {
+     "editable": false,
+     "in_file": false,
+     "key": "STRANDS_ROBOTS_VIDEO_ROOT",
+     "secret": false,
+     "set": false,
+     "shadowed": false,
+     "value": ""
+    },
+    {
+     "editable": true,
+     "in_file": false,
+     "key": "STRANDS_ROBOTS_NO_DYLD_SHIM",
+     "secret": false,
+     "set": false,
+     "shadowed": false,
+     "value": ""
+    },
+    {
+     "editable": false,
+     "in_file": false,
+     "key": "STRANDS_DASH_TASK_REQUIRES_CONFIRM",
+     "secret": false,
+     "set": false,
+     "shadowed": false,
+     "value": ""
+    },
+    {
+     "editable": false,
+     "in_file": false,
+     "key": "STRANDS_DASH_RECORD_CRUMB",
+     "secret": false,
+     "set": false,
+     "shadowed": false,
+     "value": ""
+    },
+    {
+     "editable": false,
+     "in_file": false,
+     "key": "OPENAI_BASE_URL",
+     "secret": false,
+     "set": false,
+     "shadowed": false,
+     "value": ""
+    }
+   ],
+   "env_file": ".env",
+   "mesh": {
+    "auth_mode": "none",
+    "backend": "zenoh",
+    "camera_hz": 0.0,
+    "connect": [],
+    "error": null,
+    "listen": [],
+    "live_peers": 4,
+    "local_dev": true,
+    "max_cmd_bytes": 16384,
+    "multicast": "",
+    "online": true,
+    "peer_id": "dashboard-desktop",
+    "peers": 4,
+    "policy_allow": [
+     "act",
+     "c3",
+     "cosmos3",
+     "cumotion",
+     "curobo",
+     "diffusion",
+     "f3a",
+     "flux3",
+     "flux3_action",
+     "groot",
+     "gtp",
+     "gtp_g1",
+     "holosoma",
+     "kimodo",
+     "kimodo_g1",
+     "lerobot",
+     "lerobot_local",
+     "microduck",
+     "mjlab_onnx",
+     "mock",
+     "moveit",
+     "moveit2",
+     "pi0",
+     "pi0fast",
+     "protomotions",
+     "protomotions_g1",
+     "random",
+     "remote",
+     "rl",
+     "rsl_rl_onnx",
+     "sac",
+     "smolvla",
+     "sonic",
+     "sonic_gait",
+     "sonic_latent",
+     "tdmpc",
+     "test",
+     "text2motion",
+     "vqbet",
+     "wbc",
+     "wbc_gait",
+     "wbc_latent"
+    ],
+    "port": "7447",
+    "settings": {
+     "backend": null,
+     "camera_hz": null,
+     "connect": [],
+     "listen": [],
+     "policy_type_allow": [],
+     "port": null
+    },
+    "wire_security": "DISABLED (local dev)"
+   },
+   "policies": [
+    {
+     "config_keys": [
+      "embodiment",
+      "host",
+      "port",
+      "action_space",
+      "observation_mapping",
+      "action_mapping",
+      "robot",
+      "prompt",
+      "api_key",
+      "backend",
+      "mode",
+      "model",
+      "pretrained_name_or_path",
+      "actions_per_step"
+     ],
+     "defaults": {
+      "embodiment": "droid",
+      "host": "localhost",
+      "port": 8000
+     },
+     "description": "NVIDIA Cosmos 3 omnimodal VLA policy (DROID/UMI/AV/bridge/OpenArm) via Cosmos Framework",
+     "extra": null,
+     "name": "cosmos3",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "cosmos3",
+      "c3"
+     ],
+     "trainable": true,
+     "unsettable_over_mesh": [
+      "action_space",
+      "observation_mapping",
+      "action_mapping",
+      "robot",
+      "prompt",
+      "api_key",
+      "backend",
+      "mode",
+      "model",
+      "actions_per_step"
+     ],
+     "url_patterns": [
+      "^cosmos3://"
+     ],
+     "wire_fields": [
+      {
+       "default": "droid",
+       "key": "embodiment",
+       "required": false,
+       "type": "string",
+       "wire_key": "embodiment"
+      },
+      {
+       "default": "localhost",
+       "key": "host",
+       "required": false,
+       "type": "string",
+       "wire_key": "policy_host"
+      },
+      {
+       "default": 8000,
+       "key": "port",
+       "required": false,
+       "type": "int",
+       "wire_key": "policy_port"
+      },
+      {
+       "default": null,
+       "key": "pretrained_name_or_path",
+       "required": false,
+       "type": "string",
+       "wire_key": "pretrained_name_or_path"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "robot_config",
+      "world_config",
+      "action_horizon",
+      "tensor_args",
+      "motion_gen_kwargs",
+      "warmup",
+      "device_cfg",
+      "motion_planner_kwargs"
+     ],
+     "defaults": {
+      "action_horizon": 16
+     },
+     "description": "NVIDIA cuRobo collision-aware motion planning (in-process, CUDA)",
+     "extra": null,
+     "name": "curobo",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "curobo"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "robot_config",
+      "world_config",
+      "tensor_args",
+      "motion_gen_kwargs",
+      "warmup",
+      "device_cfg",
+      "motion_planner_kwargs"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": 16,
+       "key": "action_horizon",
+       "required": false,
+       "type": "int",
+       "wire_key": "action_horizon"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "pretrained_name_or_path",
+      "revision",
+      "device",
+      "camera_map",
+      "joint_units",
+      "joint_signs",
+      "joint_offsets_deg",
+      "gripper_range",
+      "mode",
+      "execute_steps",
+      "task",
+      "warn_outside_training_range",
+      "natten_backend"
+     ],
+     "defaults": {
+      "device": "cuda",
+      "execute_steps": 32,
+      "mode": "queued",
+      "pretrained_name_or_path": "black-forest-labs/flux-3-action-so101"
+     },
+     "description": "FLUX 3 Action (Black Forest Labs) flow-matching VLA, in-process via flux_action: 2 cameras + 8-tick history + text -> 42-step absolute joint chunk at 30 Hz; SO-101 checkpoint speaks lerobot degrees + gripper percent, UnitAdapter converts to the robot's radians",
+     "extra": null,
+     "name": "flux3_action",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "flux3_action",
+      "flux3",
+      "f3a"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "revision",
+      "device",
+      "camera_map",
+      "joint_units",
+      "joint_signs",
+      "joint_offsets_deg",
+      "gripper_range",
+      "mode",
+      "execute_steps",
+      "task",
+      "warn_outside_training_range",
+      "natten_backend"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": "black-forest-labs/flux-3-action-so101",
+       "key": "pretrained_name_or_path",
+       "required": false,
+       "type": "string",
+       "wire_key": "pretrained_name_or_path"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "checkpoint",
+      "algorithm",
+      "config",
+      "target_velocity",
+      "revision",
+      "driven_joints",
+      "arm_observation",
+      "allow_missing_models"
+     ],
+     "defaults": {
+      "algorithm": "fastsac",
+      "arm_observation": "live",
+      "driven_joints": "all"
+     },
+     "description": "Amazon FAR Holosoma whole-body locomotion for the Unitree G1 (in-process, ONNX, Apache-2.0 weights)",
+     "extra": null,
+     "name": "holosoma",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "holosoma"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "algorithm",
+      "config",
+      "target_velocity",
+      "revision",
+      "driven_joints",
+      "arm_observation",
+      "allow_missing_models"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": null,
+       "key": "checkpoint",
+       "required": false,
+       "type": "string",
+       "wire_key": "model_path"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "config",
+      "model_id",
+      "diffusion_steps",
+      "guidance_scale",
+      "num_frames",
+      "transition_frames",
+      "native_fps",
+      "tracker_fps",
+      "device",
+      "dtype",
+      "cache_dir",
+      "trust_remote_code",
+      "seed",
+      "motion_agent"
+     ],
+     "defaults": {},
+     "description": "NVIDIA Kimodo text-to-motion diffusion for the Unitree G1 (prompt-driven kinematic motion, HuggingFace)",
+     "extra": null,
+     "name": "kimodo",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "kimodo",
+      "kimodo_g1",
+      "text2motion"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "config",
+      "model_id",
+      "diffusion_steps",
+      "guidance_scale",
+      "num_frames",
+      "transition_frames",
+      "native_fps",
+      "tracker_fps",
+      "device",
+      "dtype",
+      "cache_dir",
+      "trust_remote_code",
+      "seed",
+      "motion_agent"
+     ],
+     "url_patterns": [],
+     "wire_fields": [],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "pretrained_name_or_path",
+      "policy_type",
+      "device",
+      "actions_per_step",
+      "norm_tag",
+      "image_keys",
+      "inference_action_mode",
+      "embodiment",
+      "strict_keys",
+      "camera_key_map",
+      "obs_rename_override",
+      "use_processor",
+      "processor_overrides",
+      "tokenizer_max_length",
+      "tokenizer_padding_side",
+      "rtc_enabled",
+      "rtc_execution_horizon",
+      "rtc_max_guidance_weight",
+      "inference_kwargs",
+      "pad_short_actions",
+      "out_of_range_actions",
+      "cache_model",
+      "revision",
+      "compile_model"
+     ],
+     "defaults": {},
+     "description": "Direct HuggingFace inference (no server), incl. GR00T N1.7 (policy_type='groot')",
+     "extra": "lerobot",
+     "name": "lerobot_local",
+     "requires": [
+      "pretrained_name_or_path"
+     ],
+     "server_based": false,
+     "shorthands": [],
+     "trainable": true,
+     "unsettable_over_mesh": [
+      "device",
+      "actions_per_step",
+      "norm_tag",
+      "image_keys",
+      "inference_action_mode",
+      "strict_keys",
+      "camera_key_map",
+      "obs_rename_override",
+      "use_processor",
+      "processor_overrides",
+      "tokenizer_max_length",
+      "tokenizer_padding_side",
+      "rtc_enabled",
+      "rtc_execution_horizon",
+      "rtc_max_guidance_weight",
+      "inference_kwargs",
+      "pad_short_actions",
+      "out_of_range_actions",
+      "cache_model",
+      "revision",
+      "compile_model"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": null,
+       "key": "pretrained_name_or_path",
+       "required": true,
+       "type": "string",
+       "wire_key": "pretrained_name_or_path"
+      },
+      {
+       "default": null,
+       "key": "policy_type",
+       "required": false,
+       "type": "string",
+       "wire_key": "policy_type"
+      },
+      {
+       "default": null,
+       "key": "embodiment",
+       "required": false,
+       "type": "string",
+       "wire_key": "embodiment"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "onnx_path",
+      "session",
+      "providers",
+      "command",
+      "joint_names",
+      "default_pose",
+      "action_scale",
+      "command_names"
+     ],
+     "defaults": {},
+     "description": "Pollen Microduck locomotion policy (ONNX, normaliser fused into the graph) for the 14-DOF open biped \u2014 self-configures from ONNX metadata, feeds obs raw, decodes DEFAULT_POSE + action*scale",
+     "extra": null,
+     "name": "microduck",
+     "requires": [
+      "onnx_path"
+     ],
+     "server_based": false,
+     "shorthands": [
+      "microduck"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "onnx_path",
+      "session",
+      "providers",
+      "command",
+      "joint_names",
+      "default_pose",
+      "action_scale",
+      "command_names"
+     ],
+     "url_patterns": [],
+     "wire_fields": [],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "amplitude",
+      "seed"
+     ],
+     "defaults": {},
+     "description": "Sinusoidal test actions (no deps)",
+     "extra": null,
+     "name": "mock",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "mock",
+      "random",
+      "test"
+     ],
+     "trainable": true,
+     "unsettable_over_mesh": [
+      "amplitude",
+      "seed"
+     ],
+     "url_patterns": [],
+     "wire_fields": [],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "host",
+      "port",
+      "planning_group",
+      "timeout_ms",
+      "api_token",
+      "joint_name_map"
+     ],
+     "defaults": {
+      "host": "127.0.0.1",
+      "planning_group": "arm",
+      "port": 5556
+     },
+     "description": "MoveIt2 motion planning via ZMQ sidecar",
+     "extra": null,
+     "name": "moveit2",
+     "requires": [
+      "port"
+     ],
+     "server_based": true,
+     "shorthands": [
+      "moveit2"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "planning_group",
+      "timeout_ms",
+      "api_token",
+      "joint_name_map"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": 5556,
+       "key": "port",
+       "required": true,
+       "type": "int",
+       "wire_key": "policy_port"
+      },
+      {
+       "default": "127.0.0.1",
+       "key": "host",
+       "required": false,
+       "type": "string",
+       "wire_key": "policy_host"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "onnx_path",
+      "yaml_path",
+      "motion",
+      "session",
+      "providers",
+      "history_length"
+     ],
+     "defaults": {},
+     "description": "ProtoMotions Generalist Tracking Policy (ONNX, BeyondMimic-trained) for the Unitree G1 \u2014 consumes a MotionPlayer reference and emits PD joint targets",
+     "extra": null,
+     "name": "protomotions",
+     "requires": [
+      "onnx_path"
+     ],
+     "server_based": false,
+     "shorthands": [
+      "protomotions",
+      "gtp",
+      "gtp_g1",
+      "protomotions_g1"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "onnx_path",
+      "yaml_path",
+      "motion",
+      "session",
+      "providers",
+      "history_length"
+     ],
+     "url_patterns": [],
+     "wire_fields": [],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "endpoint",
+      "host",
+      "port",
+      "connect_timeout",
+      "request_timeout"
+     ],
+     "defaults": {},
+     "description": "Remote inference over WebSocket (WS-JSON) - forwards observations to a PolicyServer and returns action chunks",
+     "extra": null,
+     "name": "remote",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "remote"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "endpoint",
+      "connect_timeout",
+      "request_timeout"
+     ],
+     "url_patterns": [
+      "^wss?://"
+     ],
+     "wire_fields": [
+      {
+       "default": null,
+       "key": "host",
+       "required": false,
+       "type": "string",
+       "wire_key": "policy_host"
+      },
+      {
+       "default": null,
+       "key": "port",
+       "required": false,
+       "type": "int",
+       "wire_key": "policy_port"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "checkpoint_dir",
+      "device",
+      "raw_actions",
+      "joint_map",
+      "command",
+      "obs_terms"
+     ],
+     "defaults": {
+      "device": "cpu"
+     },
+     "description": "Deterministic rollout of an RL training checkpoint's actor: policy.pt + policy_meta.json written by create_trainer('ppo'|'fast_sac'|'fast_td3'), or an rsl_rl run from Isaac Lab (a model_<n>.pt directory, one such file, or a HuggingFace repo id holding either)",
+     "extra": null,
+     "name": "rl",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "rl"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "checkpoint_dir",
+      "device",
+      "raw_actions",
+      "joint_map",
+      "command",
+      "obs_terms"
+     ],
+     "url_patterns": [],
+     "wire_fields": [],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "onnx_path",
+      "command",
+      "robot",
+      "ee_site",
+      "target"
+     ],
+     "defaults": {
+      "ee_site": "gripper"
+     },
+     "description": "Deterministic rollout of an rsl_rl actor exported to ONNX by mjlab (metadata-driven observation rebuild; JointPositionAction decode)",
+     "extra": "sim-mjlab",
+     "name": "rsl_rl_onnx",
+     "requires": [
+      "onnx_path"
+     ],
+     "server_based": false,
+     "shorthands": [
+      "rsl_rl_onnx",
+      "mjlab_onnx"
+     ],
+     "trainable": true,
+     "unsettable_over_mesh": [
+      "onnx_path",
+      "command",
+      "robot",
+      "ee_site",
+      "target"
+     ],
+     "url_patterns": [],
+     "wire_fields": [],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "checkpoint",
+      "config",
+      "walk",
+      "target_velocity",
+      "allow_missing_models"
+     ],
+     "defaults": {
+      "walk": true
+     },
+     "description": "NVIDIA GR00T Whole-Body-Control (SONIC) humanoid locomotion (in-process, ONNX)",
+     "extra": null,
+     "name": "wbc",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "wbc",
+      "sonic"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "config",
+      "walk",
+      "target_velocity",
+      "allow_missing_models"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": null,
+       "key": "checkpoint",
+       "required": false,
+       "type": "string",
+       "wire_key": "model_path"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "checkpoint",
+      "config",
+      "target_velocity",
+      "gait_frequency",
+      "allow_missing_models"
+     ],
+     "defaults": {},
+     "description": "NVIDIA GR00T Whole-Body-Control gait-clock variant (single ONNX policy, 95-dim obs + phase clock)",
+     "extra": null,
+     "name": "wbc_gait",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "wbc_gait",
+      "sonic_gait"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "config",
+      "target_velocity",
+      "gait_frequency",
+      "allow_missing_models"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": null,
+       "key": "checkpoint",
+       "required": false,
+       "type": "string",
+       "wire_key": "model_path"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "inner",
+      "inner_provider",
+      "inner_config",
+      "checkpoint",
+      "variant",
+      "replan_every",
+      "warn_token_abs"
+     ],
+     "defaults": {
+      "replan_every": 20,
+      "variant": "default"
+     },
+     "description": "A VLA's SONIC motion tokens decoded into Unitree G1 joint targets (nvidia/GEAR-SONIC decoder, in-process ONNX) and tracked with SONIC's per-joint PD",
+     "extra": "wbc",
+     "name": "wbc_latent",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "wbc_latent",
+      "sonic_latent"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "inner",
+      "inner_provider",
+      "inner_config",
+      "variant",
+      "replan_every",
+      "warn_token_abs"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": null,
+       "key": "checkpoint",
+       "required": false,
+       "type": "string",
+       "wire_key": "model_path"
+      }
+     ],
+     "wire_safe": true
+    }
+   ],
+   "runtime": {
+    "trust_remote_code": false
+   },
+   "security": {
+    "auth_enabled": true,
+    "cors_origins": [
+     "*"
+    ]
+   },
+   "settings_file": "/home/jbit/.strands_robots/dashboard/settings.json",
+   "voice": {
+    "provider": "openai",
+    "providers": [
+     "openai",
+     "nova_sonic"
+    ],
+    "voice_name": null
+   }
+  },
+  "/api/consent": {
+   "agent_physical_motion": false,
+   "env_file": ".env",
+   "hf_repo_allow": [],
+   "kinds": [
+    "trust_remote_code",
+    "hf_repo_allow",
+    "teleop_degree_units",
+    "agent_physical_motion",
+    "policy_type_allow",
+    "policy_host_allow"
+   ],
+   "policy_host_allow": [],
+   "policy_type_allow": [],
+   "teleop_degree_units": {
+    "granted": false,
+    "is_degree_preset": false,
+    "slew_abs": null,
+    "value_abs": null
+   },
+   "trust_remote_code": false
+  },
+  "/api/devices": {
+   "camera_names": [],
+   "camera_problem": null,
+   "cameras": [],
+   "managed": {
+    "xlerobot-sim-2711": {
+     "alive": true,
+     "cameras": {},
+     "log_tail": [
+      "19:38:42 [safety:xlerobot-sim-2711] No resume verification key set. If any peer broadcasts an e-stop, this robot stays locked until you physically restart it (one message can freeze the whole fleet).",
+      "19:38:42   To allow remote resume: create an operator key with python -m strands_robots.mesh.resume_authority keygen <key-file> and set STRANDS_MESH_RESUME_PUBLIC_KEY to its public half on every peer.",
+      "19:38:42   One machine, no fleet?  Then this only means an e-stop you send yourself is cleared by a restart.",
+      "19:38:42 [mesh] WIRE SECURITY DISABLED -- STRANDS_MESH_AUTH_MODE=none. Both the mTLS terminator AND the ACL block are off. Operator opted in via STRANDS_MESH_LOCAL_DEV. This mode is for development on trusted networks only.",
+      "19:38:42 [mesh] WIRE SECURITY DISABLED -- STRANDS_MESH_AUTH_MODE=none. Both the mTLS terminator AND the ACL block are off. Operator opted in via STRANDS_MESH_LOCAL_DEV. This mode is for development on trusted networks only.",
+      "19:38:45 xlerobot-sim-2711 (sim) online"
+     ],
+     "mode": "sim",
+     "peer_id": "xlerobot-sim-2711",
+     "pid": 2401,
+     "port": null,
+     "returncode": null,
+     "robot_name": "xlerobot",
+     "started_at": 1793302711.8418164
+    }
+   },
+   "serial_ports": []
+  },
+  "/api/devices/profiles": {
+   "autospawn": true,
+   "autospawn_pending": [],
+   "path": "/home/jbit/.strands_dashboard/profiles.json",
+   "profiles": {}
+  },
+  "/api/env": {
+   "editable_source": "/home/jbit/robots",
+   "extras": [
+    {
+     "count": 51,
+     "installed": false,
+     "missing": [
+      "accelerate",
+      "awscrt",
+      "awsiotsdk",
+      "bosdyn-client",
+      "device-connect-agent-tools",
+      "device-connect-edge",
+      "diffusers",
+      "foxglove-sdk",
+      "gymnasium",
+      "lerobot",
+      "lerobot",
+      "lerobot",
+      "lerobot",
+      "mcap",
+      "msgpack",
+      "onnxruntime",
+      "psutil",
+      "pycollada",
+      "pyzmq",
+      "rby1-sdk",
+      "requests",
+      "roslibpy",
+      "torch",
+      "transformers",
+      "trimesh",
+      "xacrodoc",
+      "xarm-python-sdk"
+     ],
+     "name": "all"
+    },
+    {
+     "count": 4,
+     "installed": false,
+     "missing": [
+      "accelerate",
+      "diffusers",
+      "torch",
+      "transformers"
+     ],
+     "name": "cosmos3-diffusers"
+    },
+    {
+     "count": 2,
+     "installed": false,
+     "missing": [
+      "msgpack"
+     ],
+     "name": "cosmos3-service"
+    },
+    {
+     "count": 3,
+     "installed": true,
+     "missing": [],
+     "name": "cosmos3-sim"
+    },
+    {
+     "count": 1,
+     "installed": false,
+     "missing": [
+      "cflib"
+     ],
+     "name": "crazyflie"
+    },
+    {
+     "count": 0,
+     "installed": true,
+     "missing": [],
+     "name": "curobo"
+    },
+    {
+     "count": 8,
+     "installed": true,
+     "missing": [],
+     "name": "dashboard"
+    },
+    {
+     "count": 6,
+     "installed": false,
+     "missing": [
+      "mypy",
+      "pytest-cov",
+      "pytest-timeout",
+      "pytest-xdist",
+      "pytest",
+      "ruff"
+     ],
+     "name": "dev"
+    },
+    {
+     "count": 2,
+     "installed": false,
+     "missing": [
+      "device-connect-agent-tools",
+      "device-connect-edge"
+     ],
+     "name": "device-connect"
+    },
+    {
+     "count": 1,
+     "installed": false,
+     "missing": [
+      "requests"
+     ],
+     "name": "earthrover"
+    },
+    {
+     "count": 0,
+     "installed": true,
+     "missing": [],
+     "name": "flux3"
+    },
+    {
+     "count": 2,
+     "installed": false,
+     "missing": [
+      "foxglove-sdk",
+      "mcap"
+     ],
+     "name": "foxglove"
+    },
+    {
+     "count": 3,
+     "installed": false,
+     "missing": [
+      "lerobot",
+      "lerobot",
+      "psutil"
+     ],
+     "name": "groot"
+    },
+    {
+     "count": 2,
+     "installed": false,
+     "missing": [
+      "onnxruntime"
+     ],
+     "name": "holosoma"
+    },
+    {
+     "count": 1,
+     "installed": true,
+     "missing": [],
+     "name": "inference"
+    },
+    {
+     "count": 6,
+     "installed": false,
+     "missing": [
+      "accelerate",
+      "diffusers",
+      "torch",
+      "transformers"
+     ],
+     "name": "kimodo"
+    },
+    {
+     "count": 2,
+     "installed": false,
+     "missing": [
+      "lerobot",
+      "psutil"
+     ],
+     "name": "lerobot"
+    },
+    {
+     "count": 3,
+     "installed": true,
+     "missing": [],
+     "name": "mesh"
+    },
+    {
+     "count": 7,
+     "installed": false,
+     "missing": [
+      "awscrt",
+      "awsiotsdk"
+     ],
+     "name": "mesh-iot"
+    },
+    {
+     "count": 2,
+     "installed": false,
+     "missing": [
+      "onnxruntime"
+     ],
+     "name": "microduck"
+    },
+    {
+     "count": 3,
+     "installed": false,
+     "missing": [
+      "lerobot",
+      "lerobot",
+      "psutil"
+     ],
+     "name": "molmoact2"
+    },
+    {
+     "count": 2,
+     "installed": false,
+     "missing": [
+      "msgpack",
+      "pyzmq"
+     ],
+     "name": "moveit2"
+    },
+    {
+     "count": 1,
+     "installed": true,
+     "missing": [],
+     "name": "ollama"
+    },
+    {
+     "count": 3,
+     "installed": false,
+     "missing": [
+      "onnxruntime"
+     ],
+     "name": "protomotions"
+    },
+    {
+     "count": 1,
+     "installed": false,
+     "missing": [
+      "rby1-sdk"
+     ],
+     "name": "rby1"
+    },
+    {
+     "count": 8,
+     "installed": false,
+     "missing": [
+      "gymnasium",
+      "torch"
+     ],
+     "name": "rl"
+    },
+    {
+     "count": 1,
+     "installed": false,
+     "missing": [
+      "cyclonedds"
+     ],
+     "name": "ros2"
+    },
+    {
+     "count": 1,
+     "installed": false,
+     "missing": [
+      "roslibpy"
+     ],
+     "name": "rosbridge"
+    },
+    {
+     "count": 1,
+     "installed": true,
+     "missing": [],
+     "name": "sagemaker"
+    },
+    {
+     "count": 1,
+     "installed": true,
+     "missing": [],
+     "name": "serial"
+    },
+    {
+     "count": 1,
+     "installed": true,
+     "missing": [],
+     "name": "sim"
+    },
+    {
+     "count": 3,
+     "installed": false,
+     "missing": [
+      "gsplat",
+      "plyfile",
+      "torch"
+     ],
+     "name": "sim-gs"
+    },
+    {
+     "count": 7,
+     "installed": false,
+     "missing": [
+      "usd-core"
+     ],
+     "name": "sim-isaac"
+    },
+    {
+     "count": 11,
+     "installed": false,
+     "missing": [
+      "mjlab",
+      "mujoco-warp",
+      "onnxruntime",
+      "warp-lang"
+     ],
+     "name": "sim-mjlab"
+    },
+    {
+     "count": 6,
+     "installed": true,
+     "missing": [],
+     "name": "sim-mujoco"
+    },
+    {
+     "count": 11,
+     "installed": false,
+     "missing": [
+      "mujoco-warp",
+      "newton",
+      "trimesh",
+      "warp-lang"
+     ],
+     "name": "sim-newton"
+    },
+    {
+     "count": 9,
+     "installed": false,
+     "missing": [
+      "pycollada",
+      "trimesh",
+      "xacrodoc"
+     ],
+     "name": "sim-urdf"
+    },
+    {
+     "count": 3,
+     "installed": false,
+     "missing": [
+      "lerobot",
+      "lerobot",
+      "psutil"
+     ],
+     "name": "smolvla"
+    },
+    {
+     "count": 1,
+     "installed": false,
+     "missing": [
+      "bosdyn-client"
+     ],
+     "name": "spot"
+    },
+    {
+     "count": 1,
+     "installed": false,
+     "missing": [
+      "hello-robot-stretch-body"
+     ],
+     "name": "stretch"
+    },
+    {
+     "count": 1,
+     "installed": false,
+     "missing": [
+      "ur-rtde"
+     ],
+     "name": "ur"
+    },
+    {
+     "count": 1,
+     "installed": true,
+     "missing": [],
+     "name": "voice"
+    },
+    {
+     "count": 3,
+     "installed": false,
+     "missing": [
+      "onnxruntime"
+     ],
+     "name": "wbc"
+    },
+    {
+     "count": 1,
+     "installed": false,
+     "missing": [
+      "xarm-python-sdk"
+     ],
+     "name": "xarm"
+    }
+   ],
+   "install": null,
+   "installer": "uv",
+   "prefix": "/home/jbit/.venv",
+   "python": "/home/jbit/.venv/bin/python3",
+   "version": "3.13.17"
+  },
+  "/api/health": {
+   "build": {
+    "commit": "dd9668d5cc42",
+    "started": 1793302769.2496033,
+    "version": "0.1.dev50+gdd9668d5c"
+   },
+   "ok": true,
+   "service": "strands-robots dashboard",
+   "status": "ok",
+   "t": 1793302769.2451603,
+   "version": "0.1.dev50+gdd9668d5c"
+  },
+  "/api/mesh/config": {
+   "auth_mode": "none",
+   "backend": "zenoh",
+   "camera_hz": 0.0,
+   "connect": [],
+   "error": null,
+   "listen": [],
+   "live_peers": 4,
+   "local_dev": true,
+   "max_cmd_bytes": 16384,
+   "multicast": "",
+   "online": true,
+   "peer_id": "dashboard-desktop",
+   "peers": 4,
+   "policy_allow": [
+    "act",
+    "c3",
+    "cosmos3",
+    "cumotion",
+    "curobo",
+    "diffusion",
+    "f3a",
+    "flux3",
+    "flux3_action",
+    "groot",
+    "gtp",
+    "gtp_g1",
+    "holosoma",
+    "kimodo",
+    "kimodo_g1",
+    "lerobot",
+    "lerobot_local",
+    "microduck",
+    "mjlab_onnx",
+    "mock",
+    "moveit",
+    "moveit2",
+    "pi0",
+    "pi0fast",
+    "protomotions",
+    "protomotions_g1",
+    "random",
+    "remote",
+    "rl",
+    "rsl_rl_onnx",
+    "sac",
+    "smolvla",
+    "sonic",
+    "sonic_gait",
+    "sonic_latent",
+    "tdmpc",
+    "test",
+    "text2motion",
+    "vqbet",
+    "wbc",
+    "wbc_gait",
+    "wbc_latent"
+   ],
+   "port": "7447",
+   "settings": {
+    "backend": null,
+    "camera_hz": null,
+    "connect": [],
+    "listen": [],
+    "policy_type_allow": [],
+    "port": null
+   },
+   "wire_security": "DISABLED (local dev)"
+  },
+  "/api/mesh/iot/registry": {
+   "backend": "zenoh",
+   "count": 0,
+   "detail": "no AWS region configured (AWS_REGION or a profile)",
+   "indexed": false,
+   "ping_available": false,
+   "region": null,
+   "status": "no-credentials",
+   "things": []
+  },
+  "/api/network/hint": {
+   "client_ip": "127.0.0.1",
+   "lan_urls": [],
+   "same_network": true,
+   "why": "this dashboard listens on 127.0.0.1 only, so no LAN address reaches it; restart it with --host 0.0.0.0 (a passkey or DASHBOARD_AUTH_TOKEN must guard the API first) to offer one"
+  },
+  "/api/policies": {
+   "names": [
+    "cosmos3",
+    "curobo",
+    "flux3_action",
+    "holosoma",
+    "kimodo",
+    "lerobot_local",
+    "microduck",
+    "mock",
+    "moveit2",
+    "protomotions",
+    "remote",
+    "rl",
+    "rsl_rl_onnx",
+    "wbc",
+    "wbc_gait",
+    "wbc_latent"
+   ],
+   "providers": [
+    {
+     "config_keys": [
+      "embodiment",
+      "host",
+      "port",
+      "action_space",
+      "observation_mapping",
+      "action_mapping",
+      "robot",
+      "prompt",
+      "api_key",
+      "backend",
+      "mode",
+      "model",
+      "pretrained_name_or_path",
+      "actions_per_step"
+     ],
+     "defaults": {
+      "embodiment": "droid",
+      "host": "localhost",
+      "port": 8000
+     },
+     "description": "NVIDIA Cosmos 3 omnimodal VLA policy (DROID/UMI/AV/bridge/OpenArm) via Cosmos Framework",
+     "extra": null,
+     "name": "cosmos3",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "cosmos3",
+      "c3"
+     ],
+     "trainable": true,
+     "unsettable_over_mesh": [
+      "action_space",
+      "observation_mapping",
+      "action_mapping",
+      "robot",
+      "prompt",
+      "api_key",
+      "backend",
+      "mode",
+      "model",
+      "actions_per_step"
+     ],
+     "url_patterns": [
+      "^cosmos3://"
+     ],
+     "wire_fields": [
+      {
+       "default": "droid",
+       "key": "embodiment",
+       "required": false,
+       "type": "string",
+       "wire_key": "embodiment"
+      },
+      {
+       "default": "localhost",
+       "key": "host",
+       "required": false,
+       "type": "string",
+       "wire_key": "policy_host"
+      },
+      {
+       "default": 8000,
+       "key": "port",
+       "required": false,
+       "type": "int",
+       "wire_key": "policy_port"
+      },
+      {
+       "default": null,
+       "key": "pretrained_name_or_path",
+       "required": false,
+       "type": "string",
+       "wire_key": "pretrained_name_or_path"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "robot_config",
+      "world_config",
+      "action_horizon",
+      "tensor_args",
+      "motion_gen_kwargs",
+      "warmup",
+      "device_cfg",
+      "motion_planner_kwargs"
+     ],
+     "defaults": {
+      "action_horizon": 16
+     },
+     "description": "NVIDIA cuRobo collision-aware motion planning (in-process, CUDA)",
+     "extra": null,
+     "name": "curobo",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "curobo"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "robot_config",
+      "world_config",
+      "tensor_args",
+      "motion_gen_kwargs",
+      "warmup",
+      "device_cfg",
+      "motion_planner_kwargs"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": 16,
+       "key": "action_horizon",
+       "required": false,
+       "type": "int",
+       "wire_key": "action_horizon"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "pretrained_name_or_path",
+      "revision",
+      "device",
+      "camera_map",
+      "joint_units",
+      "joint_signs",
+      "joint_offsets_deg",
+      "gripper_range",
+      "mode",
+      "execute_steps",
+      "task",
+      "warn_outside_training_range",
+      "natten_backend"
+     ],
+     "defaults": {
+      "device": "cuda",
+      "execute_steps": 32,
+      "mode": "queued",
+      "pretrained_name_or_path": "black-forest-labs/flux-3-action-so101"
+     },
+     "description": "FLUX 3 Action (Black Forest Labs) flow-matching VLA, in-process via flux_action: 2 cameras + 8-tick history + text -> 42-step absolute joint chunk at 30 Hz; SO-101 checkpoint speaks lerobot degrees + gripper percent, UnitAdapter converts to the robot's radians",
+     "extra": null,
+     "name": "flux3_action",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "flux3_action",
+      "flux3",
+      "f3a"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "revision",
+      "device",
+      "camera_map",
+      "joint_units",
+      "joint_signs",
+      "joint_offsets_deg",
+      "gripper_range",
+      "mode",
+      "execute_steps",
+      "task",
+      "warn_outside_training_range",
+      "natten_backend"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": "black-forest-labs/flux-3-action-so101",
+       "key": "pretrained_name_or_path",
+       "required": false,
+       "type": "string",
+       "wire_key": "pretrained_name_or_path"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "checkpoint",
+      "algorithm",
+      "config",
+      "target_velocity",
+      "revision",
+      "driven_joints",
+      "arm_observation",
+      "allow_missing_models"
+     ],
+     "defaults": {
+      "algorithm": "fastsac",
+      "arm_observation": "live",
+      "driven_joints": "all"
+     },
+     "description": "Amazon FAR Holosoma whole-body locomotion for the Unitree G1 (in-process, ONNX, Apache-2.0 weights)",
+     "extra": null,
+     "name": "holosoma",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "holosoma"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "algorithm",
+      "config",
+      "target_velocity",
+      "revision",
+      "driven_joints",
+      "arm_observation",
+      "allow_missing_models"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": null,
+       "key": "checkpoint",
+       "required": false,
+       "type": "string",
+       "wire_key": "model_path"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "config",
+      "model_id",
+      "diffusion_steps",
+      "guidance_scale",
+      "num_frames",
+      "transition_frames",
+      "native_fps",
+      "tracker_fps",
+      "device",
+      "dtype",
+      "cache_dir",
+      "trust_remote_code",
+      "seed",
+      "motion_agent"
+     ],
+     "defaults": {},
+     "description": "NVIDIA Kimodo text-to-motion diffusion for the Unitree G1 (prompt-driven kinematic motion, HuggingFace)",
+     "extra": null,
+     "name": "kimodo",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "kimodo",
+      "kimodo_g1",
+      "text2motion"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "config",
+      "model_id",
+      "diffusion_steps",
+      "guidance_scale",
+      "num_frames",
+      "transition_frames",
+      "native_fps",
+      "tracker_fps",
+      "device",
+      "dtype",
+      "cache_dir",
+      "trust_remote_code",
+      "seed",
+      "motion_agent"
+     ],
+     "url_patterns": [],
+     "wire_fields": [],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "pretrained_name_or_path",
+      "policy_type",
+      "device",
+      "actions_per_step",
+      "norm_tag",
+      "image_keys",
+      "inference_action_mode",
+      "embodiment",
+      "strict_keys",
+      "camera_key_map",
+      "obs_rename_override",
+      "use_processor",
+      "processor_overrides",
+      "tokenizer_max_length",
+      "tokenizer_padding_side",
+      "rtc_enabled",
+      "rtc_execution_horizon",
+      "rtc_max_guidance_weight",
+      "inference_kwargs",
+      "pad_short_actions",
+      "out_of_range_actions",
+      "cache_model",
+      "revision",
+      "compile_model"
+     ],
+     "defaults": {},
+     "description": "Direct HuggingFace inference (no server), incl. GR00T N1.7 (policy_type='groot')",
+     "extra": "lerobot",
+     "name": "lerobot_local",
+     "requires": [
+      "pretrained_name_or_path"
+     ],
+     "server_based": false,
+     "shorthands": [],
+     "trainable": true,
+     "unsettable_over_mesh": [
+      "device",
+      "actions_per_step",
+      "norm_tag",
+      "image_keys",
+      "inference_action_mode",
+      "strict_keys",
+      "camera_key_map",
+      "obs_rename_override",
+      "use_processor",
+      "processor_overrides",
+      "tokenizer_max_length",
+      "tokenizer_padding_side",
+      "rtc_enabled",
+      "rtc_execution_horizon",
+      "rtc_max_guidance_weight",
+      "inference_kwargs",
+      "pad_short_actions",
+      "out_of_range_actions",
+      "cache_model",
+      "revision",
+      "compile_model"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": null,
+       "key": "pretrained_name_or_path",
+       "required": true,
+       "type": "string",
+       "wire_key": "pretrained_name_or_path"
+      },
+      {
+       "default": null,
+       "key": "policy_type",
+       "required": false,
+       "type": "string",
+       "wire_key": "policy_type"
+      },
+      {
+       "default": null,
+       "key": "embodiment",
+       "required": false,
+       "type": "string",
+       "wire_key": "embodiment"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "onnx_path",
+      "session",
+      "providers",
+      "command",
+      "joint_names",
+      "default_pose",
+      "action_scale",
+      "command_names"
+     ],
+     "defaults": {},
+     "description": "Pollen Microduck locomotion policy (ONNX, normaliser fused into the graph) for the 14-DOF open biped \u2014 self-configures from ONNX metadata, feeds obs raw, decodes DEFAULT_POSE + action*scale",
+     "extra": null,
+     "name": "microduck",
+     "requires": [
+      "onnx_path"
+     ],
+     "server_based": false,
+     "shorthands": [
+      "microduck"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "onnx_path",
+      "session",
+      "providers",
+      "command",
+      "joint_names",
+      "default_pose",
+      "action_scale",
+      "command_names"
+     ],
+     "url_patterns": [],
+     "wire_fields": [],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "amplitude",
+      "seed"
+     ],
+     "defaults": {},
+     "description": "Sinusoidal test actions (no deps)",
+     "extra": null,
+     "name": "mock",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "mock",
+      "random",
+      "test"
+     ],
+     "trainable": true,
+     "unsettable_over_mesh": [
+      "amplitude",
+      "seed"
+     ],
+     "url_patterns": [],
+     "wire_fields": [],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "host",
+      "port",
+      "planning_group",
+      "timeout_ms",
+      "api_token",
+      "joint_name_map"
+     ],
+     "defaults": {
+      "host": "127.0.0.1",
+      "planning_group": "arm",
+      "port": 5556
+     },
+     "description": "MoveIt2 motion planning via ZMQ sidecar",
+     "extra": null,
+     "name": "moveit2",
+     "requires": [
+      "port"
+     ],
+     "server_based": true,
+     "shorthands": [
+      "moveit2"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "planning_group",
+      "timeout_ms",
+      "api_token",
+      "joint_name_map"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": 5556,
+       "key": "port",
+       "required": true,
+       "type": "int",
+       "wire_key": "policy_port"
+      },
+      {
+       "default": "127.0.0.1",
+       "key": "host",
+       "required": false,
+       "type": "string",
+       "wire_key": "policy_host"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "onnx_path",
+      "yaml_path",
+      "motion",
+      "session",
+      "providers",
+      "history_length"
+     ],
+     "defaults": {},
+     "description": "ProtoMotions Generalist Tracking Policy (ONNX, BeyondMimic-trained) for the Unitree G1 \u2014 consumes a MotionPlayer reference and emits PD joint targets",
+     "extra": null,
+     "name": "protomotions",
+     "requires": [
+      "onnx_path"
+     ],
+     "server_based": false,
+     "shorthands": [
+      "protomotions",
+      "gtp",
+      "gtp_g1",
+      "protomotions_g1"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "onnx_path",
+      "yaml_path",
+      "motion",
+      "session",
+      "providers",
+      "history_length"
+     ],
+     "url_patterns": [],
+     "wire_fields": [],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "endpoint",
+      "host",
+      "port",
+      "connect_timeout",
+      "request_timeout"
+     ],
+     "defaults": {},
+     "description": "Remote inference over WebSocket (WS-JSON) - forwards observations to a PolicyServer and returns action chunks",
+     "extra": null,
+     "name": "remote",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "remote"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "endpoint",
+      "connect_timeout",
+      "request_timeout"
+     ],
+     "url_patterns": [
+      "^wss?://"
+     ],
+     "wire_fields": [
+      {
+       "default": null,
+       "key": "host",
+       "required": false,
+       "type": "string",
+       "wire_key": "policy_host"
+      },
+      {
+       "default": null,
+       "key": "port",
+       "required": false,
+       "type": "int",
+       "wire_key": "policy_port"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "checkpoint_dir",
+      "device",
+      "raw_actions",
+      "joint_map",
+      "command",
+      "obs_terms"
+     ],
+     "defaults": {
+      "device": "cpu"
+     },
+     "description": "Deterministic rollout of an RL training checkpoint's actor: policy.pt + policy_meta.json written by create_trainer('ppo'|'fast_sac'|'fast_td3'), or an rsl_rl run from Isaac Lab (a model_<n>.pt directory, one such file, or a HuggingFace repo id holding either)",
+     "extra": null,
+     "name": "rl",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "rl"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "checkpoint_dir",
+      "device",
+      "raw_actions",
+      "joint_map",
+      "command",
+      "obs_terms"
+     ],
+     "url_patterns": [],
+     "wire_fields": [],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "onnx_path",
+      "command",
+      "robot",
+      "ee_site",
+      "target"
+     ],
+     "defaults": {
+      "ee_site": "gripper"
+     },
+     "description": "Deterministic rollout of an rsl_rl actor exported to ONNX by mjlab (metadata-driven observation rebuild; JointPositionAction decode)",
+     "extra": "sim-mjlab",
+     "name": "rsl_rl_onnx",
+     "requires": [
+      "onnx_path"
+     ],
+     "server_based": false,
+     "shorthands": [
+      "rsl_rl_onnx",
+      "mjlab_onnx"
+     ],
+     "trainable": true,
+     "unsettable_over_mesh": [
+      "onnx_path",
+      "command",
+      "robot",
+      "ee_site",
+      "target"
+     ],
+     "url_patterns": [],
+     "wire_fields": [],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "checkpoint",
+      "config",
+      "walk",
+      "target_velocity",
+      "allow_missing_models"
+     ],
+     "defaults": {
+      "walk": true
+     },
+     "description": "NVIDIA GR00T Whole-Body-Control (SONIC) humanoid locomotion (in-process, ONNX)",
+     "extra": null,
+     "name": "wbc",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "wbc",
+      "sonic"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "config",
+      "walk",
+      "target_velocity",
+      "allow_missing_models"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": null,
+       "key": "checkpoint",
+       "required": false,
+       "type": "string",
+       "wire_key": "model_path"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "checkpoint",
+      "config",
+      "target_velocity",
+      "gait_frequency",
+      "allow_missing_models"
+     ],
+     "defaults": {},
+     "description": "NVIDIA GR00T Whole-Body-Control gait-clock variant (single ONNX policy, 95-dim obs + phase clock)",
+     "extra": null,
+     "name": "wbc_gait",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "wbc_gait",
+      "sonic_gait"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "config",
+      "target_velocity",
+      "gait_frequency",
+      "allow_missing_models"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": null,
+       "key": "checkpoint",
+       "required": false,
+       "type": "string",
+       "wire_key": "model_path"
+      }
+     ],
+     "wire_safe": true
+    },
+    {
+     "config_keys": [
+      "inner",
+      "inner_provider",
+      "inner_config",
+      "checkpoint",
+      "variant",
+      "replan_every",
+      "warn_token_abs"
+     ],
+     "defaults": {
+      "replan_every": 20,
+      "variant": "default"
+     },
+     "description": "A VLA's SONIC motion tokens decoded into Unitree G1 joint targets (nvidia/GEAR-SONIC decoder, in-process ONNX) and tracked with SONIC's per-joint PD",
+     "extra": "wbc",
+     "name": "wbc_latent",
+     "requires": [],
+     "server_based": false,
+     "shorthands": [
+      "wbc_latent",
+      "sonic_latent"
+     ],
+     "trainable": false,
+     "unsettable_over_mesh": [
+      "inner",
+      "inner_provider",
+      "inner_config",
+      "variant",
+      "replan_every",
+      "warn_token_abs"
+     ],
+     "url_patterns": [],
+     "wire_fields": [
+      {
+       "default": null,
+       "key": "checkpoint",
+       "required": false,
+       "type": "string",
+       "wire_key": "model_path"
+      }
+     ],
+     "wire_safe": true
+    }
+   ]
+  },
+  "/api/record/session": {
+   "dataset": null,
+   "episodes": [],
+   "error": null,
+   "follower": null,
+   "fps": 30,
+   "leader": null,
+   "phase": "idle",
+   "target_episodes": 10,
+   "task": ""
+  },
+  "/api/record/upload-preflight": {
+   "destination": null,
+   "detail": "this session has no dataset name yet, so there is nowhere to publish it. Name the dataset when you open the session",
+   "needs_force": false,
+   "ok": false,
+   "state": "no_dataset",
+   "user": null
+  },
+  "/api/robots/registry": {
+   "robots": [
+    {
+     "aliases": [
+      "psyonic_ability_hand"
+     ],
+     "category": "hand",
+     "description": "PSYONIC Ability Hand (5-finger prosthetic, 11-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 10,
+     "name": "ability_hand",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "pndbotics_adam_lite"
+     ],
+     "category": "humanoid",
+     "description": "PNDbotics Adam Lite Humanoid (26-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 25,
+     "name": "adam_lite",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "aero_hand_open",
+      "tetheria_aero_hand"
+     ],
+     "category": "hand",
+     "description": "Tetheria Aero Hand Open (16-DOF dexterous)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 16,
+     "name": "aero_hand",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "unitree_aliengo"
+     ],
+     "category": "mobile",
+     "description": "Unitree Aliengo Quadruped (12-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "aliengo",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "wonik_allegro"
+     ],
+     "category": "hand",
+     "description": "Wonik Allegro Hand (16-DOF dexterous)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 16,
+     "name": "allegro_hand",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "agibot_dual_arm",
+      "agibot_dual_arm_dexhand",
+      "agibot_dual_arm_full",
+      "agibot_dual_arm_gripper",
+      "agibot_genie1",
+      "galaxea_r1_pro"
+     ],
+     "category": "bimanual",
+     "description": "ALOHA Bimanual (2x ViperX 300s, 14-DOF + 2 grippers)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 16,
+     "name": "aloha",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "anybotics_anymal_b"
+     ],
+     "category": "mobile",
+     "description": "ANYbotics ANYmal B Quadruped (12-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "anymal_b",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "anybotics_anymal_c"
+     ],
+     "category": "mobile",
+     "description": "ANYbotics ANYmal C Quadruped (12-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "anymal_c",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "mobile",
+     "description": "anymal_d (quadruped URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 14,
+     "name": "anymal_d",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "apptronik_apollo"
+     ],
+     "category": "humanoid",
+     "description": "Apptronik Apollo Humanoid (34-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 32,
+     "name": "apollo",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ARX L5 (6-DOF lightweight arm)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 8,
+     "name": "arx_l5",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "asimov"
+     ],
+     "category": "humanoid",
+     "description": "Asimov V0 Bipedal Legs (12-DOF + 2 passive toes)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 14,
+     "name": "asimov_v0",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "atlas_drc (humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 30,
+     "name": "atlas_drc",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "atlas_v4 (humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 30,
+     "name": "atlas_v4",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "mobile",
+     "description": "b1 (quadruped URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "b1",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "mobile",
+     "description": "b2 (quadruped URDF from robot_descriptions)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 12,
+     "name": "b2",
+     "real_transport": {
+      "domain_id": true,
+      "network_interface": true,
+      "port_kind": "address"
+     },
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "mobile_manip",
+     "description": "bambot (mobile_manipulator URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 15,
+     "name": "bambot",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "hand",
+     "description": "barrett_hand (end_effector URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 8,
+     "name": "barrett_hand",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "bimanual",
+     "description": "baxter (dual_arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 15,
+     "name": "baxter",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "berkeley_humanoid (humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "berkeley_humanoid",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "bi_openarm_follower",
+      "dual_openarm",
+      "openarm_bimanual"
+     ],
+     "category": "bimanual",
+     "description": "Bi-manual OpenArm (dual-arm coordination)",
+     "has_real": true,
+     "has_sim": false,
+     "joints": null,
+     "name": "bi_openarm",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "bi_rebot_b601_follower",
+      "dual_rebot_b601"
+     ],
+     "category": "bimanual",
+     "description": "Bi-manual reBot B601-DM (dual 6-DOF + gripper, Damiao CAN motors)",
+     "has_real": true,
+     "has_sim": false,
+     "joints": null,
+     "name": "bi_rebot_b601",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "bi_so100",
+      "bi_so101"
+     ],
+     "category": "bimanual",
+     "description": "Bimanual SO-ARM follower (2x SO-100/SO-101, 6-DOF each, Feetech STS3215)",
+     "has_real": true,
+     "has_sim": false,
+     "joints": null,
+     "name": "bi_so_follower",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "bolt (biped URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "bolt",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "Booster T1 Humanoid (24-DOF)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 23,
+     "name": "booster_t1",
+     "real_transport": {
+      "domain_id": true,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "agility_cassie"
+     ],
+     "category": "humanoid",
+     "description": "Agility Cassie Bipedal Robot",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 22,
+     "name": "cassie",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "bitcraze_crazyflie",
+      "cf2"
+     ],
+     "category": "aerial",
+     "description": "Bitcraze Crazyflie 2 Nano-Quadcopter",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 0,
+     "name": "crazyflie",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "double_pendulum (educational URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 2,
+     "name": "double_pendulum",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "draco3 (humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 27,
+     "name": "draco3",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "Dynamixel 2R Educational Arm (2-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 2,
+     "name": "dynamixel_2r",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "earth_rover",
+      "earthrover_mini_plus",
+      "frodobots"
+     ],
+     "category": "mobile",
+     "description": "EarthRover Mini Plus (mobile outdoor navigation)",
+     "has_real": true,
+     "has_sim": false,
+     "joints": null,
+     "name": "earthrover",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "edo (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "edo",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "bxi_elf2"
+     ],
+     "category": "humanoid",
+     "description": "BXI Elf2 Humanoid (25-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 25,
+     "name": "elf2",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "ergocub (humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 57,
+     "name": "ergocub",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "mobile_manip",
+     "description": "eve_r3 (mobile_manipulator URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": false,
+     "joints": null,
+     "name": "eve_r3",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "fanuc_m710ic (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "fanuc_m710ic",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "fer (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 9,
+     "name": "fer",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "mobile_manip",
+     "description": "fetch (mobile_manipulator URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 14,
+     "name": "fetch",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "finger_edu (educational URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 3,
+     "name": "finger_edu",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "fourier_gr1",
+      "fourier_gr1_arms_only",
+      "fourier_gr1_arms_waist",
+      "fourier_gr1_full_upper_body",
+      "gr1",
+      "n1"
+     ],
+     "category": "humanoid",
+     "description": "Fourier N1 / GR-1 Humanoid (26-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 23,
+     "name": "fourier_n1",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "franka_fr3"
+     ],
+     "category": "arm",
+     "description": "Franka Research 3 (7-DOF + gripper)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 7,
+     "name": "fr3",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "franka_fr3_v2"
+     ],
+     "category": "arm",
+     "description": "Franka Research 3 v2 (7-DOF + gripper, updated)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 7,
+     "name": "fr3_v2",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "fr3_v2_1 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 9,
+     "name": "fr3_v2_1",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "gen2 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "gen2",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "gen3_lite (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 10,
+     "name": "gen3_lite",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "mobile_manip",
+     "description": "ginger (mobile_manipulator URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 49,
+     "name": "ginger",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "unitree_go1"
+     ],
+     "category": "mobile",
+     "description": "Unitree Go1 Quadruped (12-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "go1",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "oxe_google"
+     ],
+     "category": "mobile_manip",
+     "description": "Google Robot (mobile base + arm, RT-X)",
+     "has_real": false,
+     "has_sim": false,
+     "joints": 9,
+     "name": "google_robot",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "HopeJR Arm (high-DOF anthropomorphic arm, Feetech)",
+     "has_real": true,
+     "has_sim": false,
+     "joints": null,
+     "name": "hope_jr",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "hope_junior_hand",
+      "hopejr_hand"
+     ],
+     "category": "hand",
+     "description": "HopeJR Hand (dexterous anthropomorphic hand, Feetech)",
+     "has_real": true,
+     "has_sim": false,
+     "joints": null,
+     "name": "hope_jr_hand",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "mobile",
+     "description": "hyq (quadruped URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "hyq",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "icub (humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 32,
+     "name": "icub",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "iiwa7 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 7,
+     "name": "iiwa7",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "j2n4s300 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 10,
+     "name": "j2n4s300",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "j2n6s200 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 10,
+     "name": "j2n6s200",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "j2n6s300 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "j2n6s300",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "j2n7s300 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 13,
+     "name": "j2n7s300",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "j2s6s200 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 10,
+     "name": "j2s6s200",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "j2s6s300 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "j2s6s300",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "j2s7s300 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 13,
+     "name": "j2s7s300",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "jaxon (humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 38,
+     "name": "jaxon",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "jvrc1"
+     ],
+     "category": "humanoid",
+     "description": "JVRC-1 Humanoid (HRP-based, 45-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 44,
+     "name": "jvrc",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "gen3"
+     ],
+     "category": "arm",
+     "description": "Kinova Gen3 (7-DOF lightweight)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 7,
+     "name": "kinova_gen3",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "koch_follower",
+      "koch_v1.1",
+      "low_cost_robot_arm"
+     ],
+     "category": "arm",
+     "description": "Koch v1.1 Low Cost Robot Arm (6-DOF, Dynamixel)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "koch",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "iiwa",
+      "iiwa14",
+      "kuka_iiwa_14"
+     ],
+     "category": "arm",
+     "description": "KUKA LBR iiwa 14 (7-DOF collaborative)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 7,
+     "name": "kuka_iiwa",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "mobile",
+     "description": "laikago (quadruped URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "laikago",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "hand",
+     "description": "LEAP Hand (16-DOF dexterous)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 16,
+     "name": "leap_hand",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "hand",
+     "description": "leap_hand_v1 (end_effector URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 16,
+     "name": "leap_hand_v1",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "mobile_manip",
+     "description": "LeKiwi mobile manipulator (6-DOF arm on 3-omniwheel base, 9 actuators)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 9,
+     "name": "lekiwi",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "lekiwi_net",
+      "lekiwi_remote"
+     ],
+     "category": "mobile_manip",
+     "description": "LeKiwi networked client (drives a remote LeKiwi host over ZMQ)",
+     "has_real": true,
+     "has_sim": false,
+     "joints": null,
+     "name": "lekiwi_client",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "micro_duck",
+      "pollen_microduck"
+     ],
+     "category": "humanoid",
+     "description": "Pollen Microduck (14-DOF open-source biped, Dynamixel XL330)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 14,
+     "name": "microduck",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "mobile",
+     "description": "mini_cheetah (quadruped URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "mini_cheetah",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "mobile",
+     "description": "minitaur (quadruped URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 16,
+     "name": "minitaur",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "humanoid",
+      "mjc_humanoid"
+     ],
+     "category": "humanoid",
+     "description": "MuJoCo Humanoid (21-DOF reference model)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 21,
+     "name": "mujoco_humanoid",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "bimanual",
+     "description": "nextage (dual_arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 15,
+     "name": "nextage",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "omx_follower",
+      "omx_robot",
+      "robotis_omx"
+     ],
+     "category": "arm",
+     "description": "OMX Robot Arm (ROBOTIS, CAN bus motors)",
+     "has_real": true,
+     "has_sim": false,
+     "joints": null,
+     "name": "omx",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "omx_f (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 7,
+     "name": "omx_f",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "omx_l (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "omx_l",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "omy_3m (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "omy_3m",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "omy_f3m (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 10,
+     "name": "omy_f3m",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "omy_l100 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 7,
+     "name": "omy_l100",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "robotis_op3"
+     ],
+     "category": "humanoid",
+     "description": "ROBOTIS OP3 Humanoid (20-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 20,
+     "name": "op3",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "bdx",
+      "mini_bdx",
+      "open_duck",
+      "open_duck_mini_v2",
+      "open_duck_v2"
+     ],
+     "category": "humanoid",
+     "description": "Open Duck Mini V2 (16-DOF expressive biped, Feetech servos)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 16,
+     "name": "open_duck_mini",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "open_manipulator_x (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "open_manipulator_x",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "enactic_openarm",
+      "open_arm",
+      "openarm_v1",
+      "openarm_v10"
+     ],
+     "category": "arm",
+     "description": "Enactic OpenArm (7-DOF, DAMIAO motors, CAN bus)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 18,
+     "name": "openarm",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "bimanual_panda_gripper",
+      "bimanual_panda_hand",
+      "franka",
+      "franka_emika_panda",
+      "franka_panda",
+      "libero_panda",
+      "oxe_droid",
+      "oxe_droid_rel",
+      "oxe_droid_relative_eef_relative_joint",
+      "single_panda_gripper"
+     ],
+     "category": "arm",
+     "description": "Franka Emika Panda (7-DOF + gripper)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 9,
+     "name": "panda",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "mobile_manip",
+     "description": "pepper (mobile_manipulator URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 45,
+     "name": "pepper",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "agilex_piper"
+     ],
+     "category": "arm",
+     "description": "AgileX Piper (6-DOF + gripper)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 8,
+     "name": "piper",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "poppy_ergo_jr (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "poppy_ergo_jr",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "bimanual",
+     "description": "poppy_torso (dual_arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 13,
+     "name": "poppy_torso",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "mobile_manip",
+     "description": "pr2 (dual_arm mobile_manipulator URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 38,
+     "name": "pr2",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "r2 (humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 56,
+     "name": "r2",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "rainbow_rby1",
+      "rby1a"
+     ],
+     "category": "humanoid",
+     "description": "Rainbow Robotics RB-Y1A Mobile Manipulator (31-DOF)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 31,
+     "name": "rby1",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "Pollen Reachy 2",
+     "has_real": true,
+     "has_sim": false,
+     "joints": null,
+     "name": "reachy2",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "pollen_reachy_mini",
+      "reachy",
+      "reachymini"
+     ],
+     "category": "expressive",
+     "description": "Pollen Reachy Mini (6-DOF Stewart head + antennas, 9 actuators)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 16,
+     "name": "reachy_mini",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "b601_dm",
+      "rebot_b601_follower",
+      "seeed_rebot_b601"
+     ],
+     "category": "arm",
+     "description": "Seeed Studio reBot B601-DM (6-DOF + gripper, Damiao CAN motors)",
+     "has_real": true,
+     "has_sim": false,
+     "joints": 7,
+     "name": "rebot_b601",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "rhea (biped URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "rhea",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "rsk"
+     ],
+     "category": "mobile",
+     "description": "Robot Soccer Kit (multi-robot soccer, 65-DOF total)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 64,
+     "name": "robot_soccer_kit",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "robotiq"
+     ],
+     "category": "hand",
+     "description": "Robotiq 2F-85 Gripper (2-finger adaptive)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 8,
+     "name": "robotiq_2f85",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "hand",
+     "description": "Robotiq 2F-85 v4 Gripper (updated model)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "robotiq_2f85_v4",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "romeo (humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 61,
+     "name": "romeo",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "rethink_sawyer"
+     ],
+     "category": "arm",
+     "description": "Rethink Robotics Sawyer (7-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 7,
+     "name": "sawyer",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "hand",
+     "description": "Shadow DexEE Dexterous End-Effector (12-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "shadow_dexee",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "hand",
+     "description": "Shadow Dexterous Hand (24-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 24,
+     "name": "shadow_hand",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "sigmaban (humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 20,
+     "name": "sigmaban",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "simple_humanoid (educational humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 29,
+     "name": "simple_humanoid",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "aerial",
+     "description": "Skydio X2 Autonomous Drone",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 0,
+     "name": "skydio_x2",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "so100_follower",
+      "so_arm100",
+      "trs_so_arm100"
+     ],
+     "category": "arm",
+     "description": "TrossenRobotics SO-ARM100 (6-DOF, Feetech servos)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "so100",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "robotstudio_so101",
+      "so101_follower",
+      "so_arm101"
+     ],
+     "category": "arm",
+     "description": "RobotStudio SO-101 (6-DOF, upgraded SO-100)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "so101",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "mobile",
+     "description": "solo (quadruped URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "solo",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "boston_dynamics_spot"
+     ],
+     "category": "mobile_manip",
+     "description": "Boston Dynamics Spot (with arm)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 19,
+     "name": "spot",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "spryped (biped URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 8,
+     "name": "spryped",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "hello_robot_stretch_original"
+     ],
+     "category": "mobile_manip",
+     "description": "Hello Robot Stretch (original, mobile manipulator)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 17,
+     "name": "stretch",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "hello_robot_stretch",
+      "hello_robot_stretch_3"
+     ],
+     "category": "mobile_manip",
+     "description": "Hello Robot Stretch 3 (mobile manipulator)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 20,
+     "name": "stretch3",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "mobile_manip",
+     "description": "stretch_se3 (mobile_manipulator URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 14,
+     "name": "stretch_se3",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "pal_talos"
+     ],
+     "category": "humanoid",
+     "description": "PAL Robotics TALOS Humanoid (32-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 44,
+     "name": "talos",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "pal_tiago_dual",
+      "tiago",
+      "tiago++",
+      "tiago_pp"
+     ],
+     "category": "mobile_manip",
+     "description": "PAL Robotics TIAGo++ Dual-Arm Mobile (26-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 25,
+     "name": "tiago_dual",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "toddlerbot (humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 30,
+     "name": "toddlerbot",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "Toddlerbot 2xC Humanoid (45-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 44,
+     "name": "toddlerbot_2xc",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "Toddlerbot 2xM Humanoid (45-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 44,
+     "name": "toddlerbot_2xm",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "trifinger_edu (educational URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 9,
+     "name": "trifinger_edu",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "trossen_ai_bimanual"
+     ],
+     "category": "bimanual",
+     "description": "Trossen WidowX AI Bimanual",
+     "has_real": false,
+     "has_sim": false,
+     "joints": 8,
+     "name": "trossen_wxai",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "a1"
+     ],
+     "category": "mobile",
+     "description": "Unitree A1 Quadruped",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 12,
+     "name": "unitree_a1",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "g1",
+      "g1_wbc",
+      "real_g1_relative_eef_relative_joints",
+      "unitree_g1_full_body",
+      "unitree_g1_locomanip",
+      "unitree_g1_real",
+      "unitree_g1_sonic",
+      "unitree_g1_wbc"
+     ],
+     "category": "humanoid",
+     "description": "Unitree G1 Humanoid (29-DOF)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 29,
+     "name": "unitree_g1",
+     "real_transport": {
+      "domain_id": true,
+      "network_interface": true,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "g1_with_hands"
+     ],
+     "category": "humanoid",
+     "description": "Unitree G1 Humanoid with Dex3-1 hands (43-DOF: 29 body + 7 per hand)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 43,
+     "name": "unitree_g1_with_hands",
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "go2"
+     ],
+     "category": "mobile",
+     "description": "Unitree Go2 Quadruped",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 12,
+     "name": "unitree_go2",
+     "real_transport": {
+      "domain_id": true,
+      "network_interface": true,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "h1"
+     ],
+     "category": "humanoid",
+     "description": "Unitree H1 Humanoid (19-DOF)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 19,
+     "name": "unitree_h1",
+     "real_transport": {
+      "domain_id": true,
+      "network_interface": true,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "h1_2"
+     ],
+     "category": "humanoid",
+     "description": "Unitree H1-2 Humanoid (52-DOF, with hands)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 51,
+     "name": "unitree_h1_2",
+     "real_transport": {
+      "domain_id": true,
+      "network_interface": true,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "upkie (biped wheeled URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "upkie",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur10 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur10",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur10_official (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur10_official",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "Universal Robots UR10e (6-DOF industrial)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur10e",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur12e (arm URDF from robot_descriptions)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur12e",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur15 (arm URDF from robot_descriptions)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur15",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur16e (arm URDF from robot_descriptions)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur16e",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur18 (arm URDF from robot_descriptions)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur18",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur20 (arm URDF from robot_descriptions)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur20",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur3 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur3",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur30 (arm URDF from robot_descriptions)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur30",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur3_official (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur3_official",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur3e (arm URDF from robot_descriptions)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur3e",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur5 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur5",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur5_official (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur5_official",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "Universal Robots UR5e (6-DOF industrial)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur5e",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur7e (arm URDF from robot_descriptions)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur7e",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "ur8long (arm URDF from robot_descriptions)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 6,
+     "name": "ur8long",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "humanoid",
+     "description": "valkyrie (humanoid URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 59,
+     "name": "valkyrie",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "oxe_widowx",
+      "trossen_vx300s",
+      "viper",
+      "viper_x300s"
+     ],
+     "category": "arm",
+     "description": "Trossen ViperX 300s (6-DOF + gripper)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 8,
+     "name": "vx300s",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "mobile",
+     "description": "wl_p311d (quadruped URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 16,
+     "name": "wl_p311d",
+     "source": "urdf"
+    },
+    {
+     "aliases": [],
+     "category": "mobile",
+     "description": "wl_p311e (quadruped URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 16,
+     "name": "wl_p311e",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "trossen_wx250s",
+      "widow",
+      "widowx_250s"
+     ],
+     "category": "arm",
+     "description": "Trossen WidowX 250s (6-DOF + gripper)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 8,
+     "name": "wx250s",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "arm",
+     "description": "xarm6 (arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "xarm6",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "ufactory_xarm7"
+     ],
+     "category": "arm",
+     "description": "UFactory xArm 7 (7-DOF + gripper)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 13,
+     "name": "xarm7",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "mobile_manip",
+     "description": "XLeRobot sim, upstream 3-omniwheel MJCF (Vector-Wangel/XLeRobot simulation/mujoco)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 17,
+     "name": "xlerobot",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "mobile_manip",
+     "description": "XLeRobot 2-wheel sim (fork MJCF derived from upstream; meshes from the xlerobot asset) and the real 2-wheel client",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 16,
+     "name": "xlerobot_2wheels",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "xlerobot_2wheels_remote"
+     ],
+     "category": "mobile_manip",
+     "description": "XLeRobot 2-wheel networked client (drives xlerobot_2wheels_host on the Pi over ZMQ 5555/5556)",
+     "has_real": true,
+     "has_sim": false,
+     "joints": null,
+     "name": "xlerobot_2wheels_client",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "xlerobot_remote"
+     ],
+     "category": "mobile_manip",
+     "description": "XLeRobot networked client (drives a remote xlerobot_host on the Pi over ZMQ 5555/5556)",
+     "has_real": true,
+     "has_sim": false,
+     "joints": null,
+     "name": "xlerobot_client",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "serial"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "m3_pro",
+      "m3pro",
+      "rosmaster_m3_pro",
+      "rosmaster_m3pro",
+      "yahboom_m3_pro",
+      "yahboom_rosmaster_m3_pro"
+     ],
+     "category": "mobile_manip",
+     "description": "Yahboom ROSMASTER M3 Pro (mecanum base + DOFBOT-Pro 6-DOF arm: 5 servos + gripper, 9 actuators)",
+     "has_real": true,
+     "has_sim": true,
+     "joints": 10,
+     "name": "yahboom_m3pro",
+     "real_transport": {
+      "domain_id": false,
+      "network_interface": false,
+      "port_kind": "address"
+     },
+     "source": "curated"
+    },
+    {
+     "aliases": [
+      "i2rt_yam"
+     ],
+     "category": "arm",
+     "description": "i2rt YAM Arm (8-DOF)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 8,
+     "name": "yam",
+     "source": "curated"
+    },
+    {
+     "aliases": [],
+     "category": "bimanual",
+     "description": "yumi (dual_arm URDF from robot_descriptions)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 18,
+     "name": "yumi",
+     "source": "urdf"
+    },
+    {
+     "aliases": [
+      "unitree_z1"
+     ],
+     "category": "arm",
+     "description": "Unitree Z1 (6-DOF + gripper)",
+     "has_real": false,
+     "has_sim": true,
+     "joints": 6,
+     "name": "z1",
+     "source": "curated"
+    }
+   ]
+  },
+  "/api/safety": {
+   "fleet": {
+    "reason": "no e-stop or resume seen since this dashboard started",
+    "state": "unknown"
+   },
+   "lockout": {
+    "reason": "no e-stop or resume seen since this dashboard started",
+    "state": "unknown"
+   },
+   "scope": "this dashboard's simulation"
+  },
+  "/api/settings": {
+   "file": "/home/jbit/.strands_robots/dashboard/settings.json",
+   "settings": {
+    "agent": {
+     "max_tokens": null,
+     "model_id": null,
+     "system_prompt": null,
+     "temperature": null
+    },
+    "mesh": {
+     "backend": null,
+     "camera_hz": null,
+     "connect": [],
+     "listen": [],
+     "policy_type_allow": [],
+     "port": null
+    },
+    "runtime": {
+     "trust_remote_code": false
+    },
+    "security": {
+     "auth_token": true,
+     "cors_origins": []
+    },
+    "voice": {
+     "provider": "openai",
+     "voice_name": null
+    }
+   }
+  },
+  "/api/sim": {
+   "sessions": []
+  },
+  "/api/training/datasets": {
+   "datasets": [],
+   "hf_auth": {
+    "authenticated": false,
+    "detail": "no HF token on this machine",
+    "user": null
+   },
+   "hub_count": 0,
+   "local_count": 0,
+   "problem": "Hub search unavailable (ProxyError: 403 Forbidden) - showing local datasets only",
+   "query": "",
+   "total_matched": 0
+  },
+  "/api/training/jobs": {
+   "jobs": [],
+   "problem": null
+  },
+  "/api/training/trainers": {
+   "fields": [
+    "provider",
+    "dataset_root",
+    "dataset_repo_id",
+    "base_model",
+    "output_dir",
+    "embodiment",
+    "steps",
+    "batch_size",
+    "learning_rate",
+    "save_freq",
+    "method",
+    "lora_r",
+    "lora_alpha",
+    "seed",
+    "val_episodes"
+   ],
+   "output_home": "/home/jbit/strands/training",
+   "trainers": [
+    "cosmos3",
+    "fast_sac",
+    "fast_td3",
+    "isaaclab",
+    "lerobot_local",
+    "mjlab",
+    "mock",
+    "ppo",
+    "rsl_rl",
+    "rsl_rl_onnx",
+    "sagemaker"
+   ],
+   "unsupported": {
+    "cosmos3": "needs a training recipe TOML (extra['sft_toml']) that selects the registered experiment, and this form has no field for it - run cosmos3 from a script",
+    "fast_sac": "reinforcement-learning trainers learn from a live environment, not from a recorded dataset, so they are driven from a script (RLTrainSpec) rather than this form",
+    "fast_td3": "reinforcement-learning trainers learn from a live environment, not from a recorded dataset, so they are driven from a script (RLTrainSpec) rather than this form",
+    "ppo": "reinforcement-learning trainers learn from a live environment, not from a recorded dataset, so they are driven from a script (RLTrainSpec) rather than this form",
+    "sagemaker": "submits the job to AWS, so it needs an ECR image_uri, an execution role_arn, and s3:// paths for the dataset and the output - this form has no field for any of them, and a managed job cannot mount this machine's disk. Run the sagemaker trainer from a script"
+   }
+  },
+  "/api/whoami": {
+   "name": "demo",
+   "sub": "demo",
+   "via": "passkey"
+  }
+ },
+ "sim_peers": {
+  "xlerobot-sim-2711": {
+   "first_seen": 1793302722.507488,
+   "health": {
+    "cpu_load": 4.86,
+    "disk_free_gb": 27.0,
+    "mem_pct": 14.7,
+    "peer_id": "xlerobot-sim-2711",
+    "t": 1793302796.5010717,
+    "uptime_s": 705.0
+   },
+   "last_seen": 1793302798.401685,
+   "legs": {
+    "lan": 1793302797.9986172
+   },
+   "origin": "managed",
+   "peer_id": "xlerobot-sim-2711",
+   "presence": {
+    "hostname": "arch-desktop",
+    "robot_id": "xlerobot-sim-2711",
+    "robot_type": "sim",
+    "sim_robots": [
+     "xlerobot"
+    ],
+    "timestamp": 1793302797.9965663,
+    "tool_name": "xlerobot_sim",
+    "tool_spec_hash": "99833914856d545eacec452514de64627837579cd29952a7f828b3d9af1d2a0f",
+    "topics": [
+     "health"
+    ],
+    "world": true
+   },
+   "presence_source": "wire",
+   "reach": "lan",
+   "sim_corroborated": true,
+   "stale": false,
+   "state": {
+    "peer_id": "xlerobot-sim-2711",
+    "robots": {
+     "xlerobot": {
+      "active": false
+     }
+    },
+    "sim_time": 71.50000000001477,
+    "t": 1793302798.3998775
+   }
+  },
+  "xlerobot-sim-2711__xlerobot": {
+   "cameras": {
+    "front": {
+     "displayable": true,
+     "encoding": "jpeg",
+     "latency_ms": 2,
+     "shape": [
+      480,
+      640,
+      3
+     ],
+     "t": 1793302797.7904973,
+     "via": "inline"
+    }
+   },
+   "first_seen": 1793302722.520384,
+   "health": {
+    "cpu_load": 4.86,
+    "disk_free_gb": 27.0,
+    "mem_pct": 14.7,
+    "peer_id": "xlerobot-sim-2711__xlerobot",
+    "t": 1793302796.521289,
+    "uptime_s": 705.0
+   },
+   "last_seen": 1793302798.4201527,
+   "legs": {
+    "lan": 1793302798.0245261
+   },
+   "origin": "managed",
+   "peer_id": "xlerobot-sim-2711__xlerobot",
+   "presence": {
+    "hostname": "arch-desktop",
+    "robot_id": "xlerobot-sim-2711__xlerobot",
+    "robot_type": "sim",
+    "sim_robots": [
+     "xlerobot"
+    ],
+    "timestamp": 1793302798.0201526,
+    "tool_spec_hash": "99833914856d545eacec452514de64627837579cd29952a7f828b3d9af1d2a0f",
+    "topics": [
+     "health"
+    ],
+    "world": true
+   },
+   "presence_source": "wire",
+   "reach": "lan",
+   "sim_corroborated": true,
+   "stale": false,
+   "state": {
+    "joints": {
+     "Elbow_L": {
+      "position": 0.009495155863110501,
+      "velocity": 4.302898254428745e-10
+     },
+     "Elbow_R": {
+      "position": 0.009495155863104995,
+      "velocity": 4.218771958625216e-10
+     },
+     "Jaw_L": {
+      "position": -0.00011624840629382777,
+      "velocity": 1.4406252719135025e-10
+     },
+     "Jaw_R": {
+      "position": -0.0001162484062985743,
+      "velocity": 1.4126176100930706e-10
+     },
+     "Pitch_L": {
+      "position": -0.01892330831099771,
+      "velocity": 2.2745740228926175e-10
+     },
+     "Pitch_R": {
+      "position": -0.01892330831099972,
+      "velocity": 2.2300619831727417e-10
+     },
+     "Rotation_L": {
+      "position": -8.195008266671734e-10,
+      "velocity": -4.135199885935934e-12
+     },
+     "Rotation_R": {
+      "position": -8.19500842776562e-10,
+      "velocity": -4.1092846764744574e-12
+     },
+     "ST3215_Servo_Motor-v1-1_Hub-2---Servo": {
+      "position": 2.2136307895498155e-06,
+      "velocity": 3.093826021037571e-08
+     },
+     "ST3215_Servo_Motor-v1-2_Hub---Servo": {
+      "position": 9.269515848809371e-06,
+      "velocity": 1.2955389222157604e-07
+     },
+     "ST3215_Servo_Motor-v1_Revolute-40": {
+      "position": -7.796801383079452e-06,
+      "velocity": -1.0897076470415079e-07
+     },
+     "Wrist_Pitch_L": {
+      "position": 0.0025147578797187794,
+      "velocity": -2.0679461795750518e-10
+     },
+     "Wrist_Pitch_R": {
+      "position": 0.0025147578797253796,
+      "velocity": -2.0277394824945145e-10
+     },
+     "Wrist_Roll_L": {
+      "position": -7.033397485251191e-06,
+      "velocity": -8.869335346518447e-13
+     },
+     "Wrist_Roll_R": {
+      "position": -7.0333974852271145e-06,
+      "velocity": -8.596149376230567e-13
+     },
+     "head_pan_joint": {
+      "position": -0.013038961123859697,
+      "velocity": -0.00023793826880798283
+     },
+     "head_tilt_joint": {
+      "position": 1.4513797080185769,
+      "velocity": -1.0020304728300689e-06
+     },
+     "hinge_joint_z": {
+      "position": -2.642755309980822e-07,
+      "velocity": -4.468957867201351e-11
+     },
+     "slide_joint_x": {
+      "position": -1.494991028196863e-05,
+      "velocity": 4.150324298819138e-09
+     },
+     "slide_joint_y": {
+      "position": 2.107805689998343e-06,
+      "velocity": 1.406293034188457e-09
+     }
+    },
+    "peer_id": "xlerobot-sim-2711__xlerobot",
+    "robots": {
+     "xlerobot": {
+      "active": false
+     }
+    },
+    "sim_time": 71.55000000001465,
+    "t": 1793302798.419348
+   }
+  }
+ }
+}
