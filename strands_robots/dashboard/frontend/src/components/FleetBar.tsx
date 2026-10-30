@@ -3,7 +3,6 @@ import type { ConnState } from '../lib/useMesh'
 import { backendLabel } from '../lib/endpoints'
 import { connBadge } from '../lib/connBadge'
 import { absentNotice, quietNotice, type AbsentChild } from '../lib/absentChildren'
-import StrandsMark from './StrandsMark'
 import { useEffect, useRef, useState } from 'react'
 import { useDialogFocus } from '../lib/useDialogFocus'
 import { chooseScheme, effectiveScheme, nextScheme, storedScheme, systemScheme, type Scheme } from '../lib/scheme'
@@ -123,11 +122,7 @@ export default function FleetBar({
   return (
     <header className="fleetbar">
       <div className="brand">
-        {/* The docs header, verbatim (overrides/partials/logo.html): the wordmark links out to
-            strandsagents.com, "Jacere" names this project. */}
-        <a className="logo" href="https://strandsagents.com/" title="Strands Agents" aria-label="Strands Agents">
-          <StrandsMark height={18} title="Strands Agents" />
-        </a>
+        {/* Fork patch: the project name is the only header text (the Strands wordmark is gone). */}
         <div>
           <h1 className="project">Jacere</h1>
         </div>

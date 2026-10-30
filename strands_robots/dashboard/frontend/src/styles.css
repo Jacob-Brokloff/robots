@@ -409,13 +409,12 @@ a:hover { color: var(--accent-bright); }
   border-bottom: 1px solid var(--glass-border);
 }
 .brand { display: flex; align-items: center; gap: 10px; }
-/* The docs header (overrides/partials/logo.html): the pixel STRANDS wordmark in
- * the Strands green, then "/robots" in mono ink. The wordmark is a link out to
- * strandsagents.com, as it is there. */
+/* .logo / .mark: the Strands wordmark, still used by the sign-in card. The fleet
+ * header shows only the project name, in the accent green (fork patch). */
 .logo { display: flex; align-items: center; color: var(--accent); }
 .logo:hover { color: var(--accent-bright); }
 .mark { display: block; height: 1.15rem; width: auto; }
-.brand h1.project { font-family: var(--mono); font-size: .85rem; font-weight: 600; letter-spacing: 0; color: var(--text); }
+.brand h1.project { font-family: var(--mono); font-size: 1.15rem; font-weight: 700; letter-spacing: .04em; color: var(--accent); }
 .brand .sub { font-size: var(--fs-tiny); color: var(--dim); font-family: var(--mono); white-space: nowrap; }
 .brand .backend { opacity: .65; }
 .fleet-right { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; justify-content: flex-end; }
