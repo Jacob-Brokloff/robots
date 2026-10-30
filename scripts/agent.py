@@ -16,7 +16,7 @@ import sys
 from strands import Agent
 from strands.models.openai import OpenAIModel
 
-from strands_robots.tools import robot_mesh
+from strands_robots.tools.robot_mesh import robot_mesh
 
 SYSTEM_PROMPT = (
     "You operate robots on a Strands Robots Zenoh mesh. Use the robot_mesh tool: 'peers' to discover "
