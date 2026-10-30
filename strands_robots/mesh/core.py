@@ -316,7 +316,7 @@ def _real_to_sim_apply(robot_name: str) -> Callable[[Any, dict[str, float]], Any
     # out); a first frame that jumps straight to the leaders' folded pose flips the 2-wheel base over.
     max_rate = float(spec.get("max_rate", 2.0))
     last: dict[str, float] = {name: min(max(0.0, j["range"][0]), j["range"][1]) for name, j in joints.items()}
-    clock = {"t": None}
+    clock: dict[str, float | None] = {"t": None}
 
     def apply_fn(host: Any, action: dict[str, float], _rn: str = robot_name) -> Any:
         now = time.monotonic()
@@ -3634,9 +3634,7 @@ class Mesh(SensorLoopsMixin):
                 if teleop_robot_name is not None:
                     apply_fn = _real_to_sim_apply(teleop_robot_name)
                     return dict(
-                        teleop_host.start_teleop_receive(
-                            source, dev, robot_name=teleop_robot_name, apply_fn=apply_fn
-                        )
+                        teleop_host.start_teleop_receive(source, dev, robot_name=teleop_robot_name, apply_fn=apply_fn)
                     )
                 return dict(teleop_host.start_teleop_receive(source, dev))
             return {"error": "robot does not support teleop_receive"}
@@ -3647,12 +3645,18 @@ class Mesh(SensorLoopsMixin):
             # Fork patch: a Simulation can start receivers but has no stop_teleop; stop them here.
             receivers = getattr(teleop_host, "_input_receivers", None)
             if isinstance(receivers, dict):
-                stopped = {}
+                stopped_receivers: dict[str, Any] = {}
                 for key in [k for k in receivers if dev is None or k.endswith(f"/{dev}")]:
                     rcv = receivers.pop(key)
                     rcv.stop()
-                    stopped[key] = rcv.stats
-                return {"status": "success", "content": [{"text": f"stopped {len(stopped)} receiver(s)"}, {"json": {"stopped": stopped}}]}
+                    stopped_receivers[key] = rcv.stats
+                return {
+                    "status": "success",
+                    "content": [
+                        {"text": f"stopped {len(stopped_receivers)} receiver(s)"},
+                        {"json": {"stopped": stopped_receivers}},
+                    ],
+                }
             return {"error": "robot does not support stop_teleop"}
         return {"error": f"unknown action: {action}"}
 

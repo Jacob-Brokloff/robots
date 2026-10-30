@@ -75,7 +75,10 @@ dependencies = [
     # tests/test_strands_agents_floor_ships_the_imported_api.py, which owns that
     # measurement, grades the members the gate calls, and fails the moment a
     # newer strands symbol is imported without raising this floor.
-    "strands-agents>=1.57.2,<2.0.0",
+    # Capped below 1.62.0 (fork): 1.62.0 turns ``strands.bidi.models.openai``
+    # into a package that no longer exports ``OpenAIRealtimeModel``, so the
+    # voice console's import breaks. Lift the cap once voice.py follows it.
+    "strands-agents>=1.57.2,<1.62.0",
     "numpy>=1.21.0,<3.0.0",
     "opencv-python-headless>=4.5.0,<5.0.0",
     # Pillow < 12.3.0 carries eleven HIGH advisories (heap OOB write in
@@ -744,7 +747,7 @@ ros2 = [
 # Delegate to strands-agents' own [ollama] extra (bounded pin, ollama>=0.4.8,<1.0.0)
 # so the client version stays in sync with the code that imports it.
 ollama = [
-    "strands-agents[ollama]>=1.57.2,<2.0.0",
+    "strands-agents[ollama]>=1.57.2,<1.62.0",
 ]
 # Live Foxglove view and MCAP recording (strands_robots/foxglove/). foxglove-sdk
 # is a Rust wheel (abi3, about 16 MB) that serves the Foxglove WebSocket
@@ -823,7 +826,7 @@ dashboard = [
 # its SDK, google-genai, caps websockets below 17 as well, so it cannot be
 # installed next to this package.
 voice = [
-    "strands-agents[bidi]>=1.57.2,<2.0.0",
+    "strands-agents[bidi]>=1.57.2,<1.62.0",
 ]
 all = [
     "strands-robots[moveit2]",
