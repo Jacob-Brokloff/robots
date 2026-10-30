@@ -124,16 +124,12 @@ export default function FleetBar({
     <header className="fleetbar">
       <div className="brand">
         {/* The docs header, verbatim (overrides/partials/logo.html): the wordmark links out to
-            strandsagents.com, "/robots" names this project. */}
+            strandsagents.com, "Jacere" names this project. */}
         <a className="logo" href="https://strandsagents.com/" title="Strands Agents" aria-label="Strands Agents">
           <StrandsMark height={18} title="Strands Agents" />
         </a>
         <div>
-          <h1 className="project">/robots</h1>
-          <div className="sub" title={`API: ${backendLabel()}`}>
-            {dashboardId || 'fleet cockpit'}
-            <span className="backend"> · {backendLabel()}</span>
-          </div>
+          <h1 className="project">Jacere</h1>
         </div>
       </div>
 
